@@ -74,6 +74,38 @@ once, relaunch with a live run, and relaunch with a run that expired while quit.
 Window behaviour (level, size, position stability across launches) was verified
 against the live window server rather than asserted.
 
+## Addendum — statuses, notes, resizing
+
+Added after the first build.
+
+**Statuses.** `TaskStatus` (notStarted / inProgress / blocked / done) persisted
+as a string so new cases never break an existing store. Status is the source of
+truth; `completedAt` only records when it reached done and is cleared whenever
+it leaves done, so "done today" cannot drift. Tasks written before statuses
+existed are reconciled on load — a task with a `completedAt` comes back as done,
+not as "Not started".
+
+Transitions: starting a timer marks a task In progress; moving the *running*
+task to any non-done status stops its timer and banks the focused time, since
+you are no longer working on it.
+
+**Notes.** A `note` string per task, edited inline under the task row, plus a
+single-row `Scratchpad` model behind the Notes tab. Both write through on a
+400 ms debounce rather than hitting SwiftData on every keystroke.
+
+**Resizing.** Two things were needed beyond adding `.resizable` to the style
+mask, both found by driving the real window rather than by reading code:
+
+1. `NSHostingView` pushes SwiftUI's intrinsic size onto the window as Auto
+   Layout constraints, which override `minSize`/`maxSize` and stopped the panel
+   collapsing back to pill height. Fixed with `hosting.sizingOptions = []`.
+2. `minSize`/`maxSize` are not honoured on a borderless panel at all, so user
+   edge drags were unconstrained. Clamping moved into
+   `windowWillResize(_:to:)`, which is the reliable hook.
+
+Sizes are remembered per mode and saved only on `didEndLiveResize`, so the
+app's own animated expand/collapse never overwrites what the user chose.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, calendar integration, a

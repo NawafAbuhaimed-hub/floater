@@ -14,6 +14,15 @@ enum Theme {
     }
 
     static let accent = Color(red: 0.19, green: 0.82, blue: 0.35)
+
+    static func color(for status: TaskStatus) -> Color {
+        switch status {
+        case .notStarted: return Color(red: 0.56, green: 0.56, blue: 0.58)
+        case .inProgress: return Color(red: 0.04, green: 0.52, blue: 1.00)
+        case .blocked: return Color(red: 1.00, green: 0.27, blue: 0.23)
+        case .done: return accent
+        }
+    }
 }
 
 /// The frosted capsule / card the panel content sits on.
@@ -57,5 +66,41 @@ extension TimeInterval {
         }
         if total >= 60 { return "\(total / 60)m" }
         return "\(total)s"
+    }
+}
+
+
+/// The diagonal grip in the bottom-right corner. Dragging it resizes the panel.
+struct ResizeGrip: View {
+    @Environment(\.resizeWindow) private var resizeWindow
+    @State private var last: CGSize = .zero
+    @State private var hovering = false
+
+    var body: some View {
+        Canvas { context, size in
+            let color = Color.primary.opacity(hovering ? 0.55 : 0.28)
+            for offset in stride(from: CGFloat(0), through: 8, by: 4) {
+                var path = Path()
+                path.move(to: CGPoint(x: size.width - offset, y: size.height))
+                path.addLine(to: CGPoint(x: size.width, y: size.height - offset))
+                context.stroke(path, with: .color(color), lineWidth: 1.5)
+            }
+        }
+        .frame(width: 14, height: 14)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    let delta = CGSize(
+                        width: value.translation.width - last.width,
+                        height: value.translation.height - last.height
+                    )
+                    last = value.translation
+                    resizeWindow?(delta)
+                }
+                .onEnded { _ in last = .zero }
+        )
+        .help("Drag to resize")
     }
 }

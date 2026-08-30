@@ -3,12 +3,18 @@ import AppKit
 import SwiftUI
 import Combine
 
-/// Owns the pill panel: its size for each mode, where it lives on screen, and
-/// keeping it inside a visible display.
+/// Owns the pill panel: how big it is in each mode, where it lives, and keeping
+/// it inside a display that actually exists.
 @MainActor
-final class FloatingPanelController {
-    static let collapsedSize = CGSize(width: 300, height: 56)
-    static let expandedSize = CGSize(width: 360, height: 480)
+final class FloatingPanelController: NSObject, NSWindowDelegate {
+    static let defaultCollapsed = CGSize(width: 300, height: 56)
+    static let defaultExpanded = CGSize(width: 360, height: 520)
+
+    /// The pill keeps a fixed height; only the expanded panel resizes freely.
+    static let collapsedBounds = (min: CGSize(width: 240, height: 56),
+                                  max: CGSize(width: 640, height: 56))
+    static let expandedBounds = (min: CGSize(width: 320, height: 380),
+                                 max: CGSize(width: 900, height: 1100))
 
     let panel: FloatingPanel
     private let model: AppModel
@@ -18,16 +24,33 @@ final class FloatingPanelController {
     init(model: AppModel, prefs: Preferences) {
         self.model = model
         self.prefs = prefs
-        let size = Self.collapsedSize
-        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size))
+        let size = Self.clampSize(prefs.collapsedSize ?? Self.defaultCollapsed, to: Self.collapsedBounds)
+        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size), resizable: true)
+        super.init()
 
-        let hosting = NSHostingView(rootView: RootView().environmentObject(model))
+        panel.onCancel = { [weak model] in model?.mode = .collapsed }
+
+        // The corner grip drives `resizeBy` directly, so dragging the corner
+        // works regardless of how the borderless window handles resize edges.
+        // The box defers capturing `self`, which does not exist yet.
+        let resizer = ResizeBox()
+        let hosting = NSHostingView(
+            rootView: RootView()
+                .environmentObject(model)
+                .environment(\.resizeWindow, { delta in resizer.handler?(delta) })
+        )
+        // Without this the hosting view pushes SwiftUI's intrinsic size onto the
+        // window as Auto Layout constraints, which override minSize/maxSize and
+        // stop the panel collapsing back to pill height.
+        hosting.sizingOptions = []
         hosting.frame = NSRect(origin: .zero, size: size)
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
+        defer { resizer.handler = { [weak self] delta in self?.resizeBy(delta) } }
 
-        panel.onCancel = { [weak model] in model?.mode = .collapsed }
-        placeAtSavedOrDefaultOrigin()
+        panel.delegate = self
+        applyLimits(for: model.mode)
+        placeAtSavedOrDefaultOrigin(size: size)
 
         model.$mode
             .removeDuplicates(by: { $0 == $1 })
@@ -37,8 +60,14 @@ final class FloatingPanelController {
         NotificationCenter.default.publisher(for: NSWindow.didMoveNotification, object: panel)
             .sink { [weak self] _ in
                 guard let self else { return }
-                prefs.panelOrigin = self.panel.frame.origin
+                self.prefs.panelOrigin = self.panel.frame.origin
             }
+            .store(in: &cancellables)
+
+        // `didEndLiveResize` fires only for a user dragging an edge or corner,
+        // so our own animated mode changes never overwrite the saved size.
+        NotificationCenter.default.publisher(for: NSWindow.didEndLiveResizeNotification, object: panel)
+            .sink { [weak self] _ in self?.rememberSize() }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
@@ -46,9 +75,7 @@ final class FloatingPanelController {
             .store(in: &cancellables)
     }
 
-    func show() {
-        panel.orderFrontRegardless()
-    }
+    func show() { panel.orderFrontRegardless() }
 
     func toggleVisibility() {
         if panel.isVisible { panel.orderOut(nil) } else { show() }
@@ -57,14 +84,74 @@ final class FloatingPanelController {
     var isVisible: Bool { panel.isVisible }
 
     /// Screen-space centre of the pill, used as the confetti launch point.
-    var anchorPoint: CGPoint {
-        CGPoint(x: panel.frame.midX, y: panel.frame.midY)
+    var anchorPoint: CGPoint { CGPoint(x: panel.frame.midX, y: panel.frame.midY) }
+
+    // MARK: - Sizing
+
+    private func size(for mode: AppModel.Mode) -> CGSize {
+        switch mode {
+        case .collapsed:
+            return Self.clampSize(prefs.collapsedSize ?? Self.defaultCollapsed, to: Self.collapsedBounds)
+        case .expanded:
+            return Self.clampSize(prefs.expandedSize ?? Self.defaultExpanded, to: Self.expandedBounds)
+        }
+    }
+
+    private var currentBounds: (min: CGSize, max: CGSize) {
+        model.mode == .collapsed ? Self.collapsedBounds : Self.expandedBounds
+    }
+
+    private func applyLimits(for mode: AppModel.Mode) {
+        let bounds = mode == .collapsed ? Self.collapsedBounds : Self.expandedBounds
+        panel.minSize = bounds.min
+        panel.maxSize = bounds.max
+    }
+
+    /// `minSize`/`maxSize` are not honoured on a borderless panel, so the size
+    /// a user drags an edge to is clamped here instead. The pill's fixed height
+    /// falls out of this too.
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        Self.clampSize(frameSize, to: currentBounds)
+    }
+
+    private func rememberSize() {
+        switch model.mode {
+        case .collapsed: prefs.collapsedSize = panel.frame.size
+        case .expanded: prefs.expandedSize = panel.frame.size
+        }
+    }
+
+    /// Corner-grip resize. Grows right and down, keeping the top-left corner put.
+    private func resizeBy(_ delta: CGSize) {
+        let bounds = currentBounds
+        let current = panel.frame
+        let target = Self.clampSize(
+            CGSize(width: current.width + delta.width, height: current.height + delta.height),
+            to: bounds
+        )
+        guard target != current.size else { return }
+        let frame = NSRect(
+            x: current.minX,
+            y: current.maxY - target.height,
+            width: target.width,
+            height: target.height
+        )
+        panel.setFrame(clamped(frame), display: true)
+        rememberSize()
+    }
+
+    private static func clampSize(_ size: CGSize, to bounds: (min: CGSize, max: CGSize)) -> CGSize {
+        CGSize(
+            width: min(max(size.width, bounds.min.width), bounds.max.width),
+            height: min(max(size.height, bounds.min.height), bounds.max.height)
+        )
     }
 
     // MARK: - Layout
 
     private func apply(mode: AppModel.Mode) {
-        let target = mode == .collapsed ? Self.collapsedSize : Self.expandedSize
+        applyLimits(for: mode)
+        let target = size(for: mode)
         let current = panel.frame
         // Grow downward from the current top-left corner so the pill stays put.
         var frame = NSRect(
@@ -88,8 +175,7 @@ final class FloatingPanelController {
         }
     }
 
-    private func placeAtSavedOrDefaultOrigin() {
-        let size = Self.collapsedSize
+    private func placeAtSavedOrDefaultOrigin(size: CGSize) {
         let origin: CGPoint
         if let saved = prefs.panelOrigin {
             origin = saved
@@ -113,16 +199,35 @@ final class FloatingPanelController {
         let host = screens.max { a, b in
             a.frame.intersection(frame).area < b.frame.intersection(frame).area
         } ?? NSScreen.main ?? screens[0]
-        let bounds = host.visibleFrame
+        let visible = host.visibleFrame
         var result = frame
-        result.size.width = min(result.width, bounds.width)
-        result.size.height = min(result.height, bounds.height)
-        result.origin.x = min(max(result.minX, bounds.minX), bounds.maxX - result.width)
-        result.origin.y = min(max(result.minY, bounds.minY), bounds.maxY - result.height)
+        result.size.width = min(result.width, visible.width)
+        result.size.height = min(result.height, visible.height)
+        result.origin.x = min(max(result.minX, visible.minX), visible.maxX - result.width)
+        result.origin.y = min(max(result.minY, visible.minY), visible.maxY - result.height)
         return result
     }
 }
 
 private extension NSRect {
     var area: CGFloat { isNull ? 0 : width * height }
+}
+
+/// Holds the resize callback so the hosting view can be built before the
+/// controller finishes initialising.
+@MainActor
+private final class ResizeBox {
+    var handler: ((CGSize) -> Void)?
+}
+
+/// Lets a SwiftUI view ask the window to resize itself.
+private struct ResizeWindowKey: EnvironmentKey {
+    static let defaultValue: ((CGSize) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    var resizeWindow: ((CGSize) -> Void)? {
+        get { self[ResizeWindowKey.self] }
+        set { self[ResizeWindowKey.self] = newValue }
+    }
 }

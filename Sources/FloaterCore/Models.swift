@@ -12,6 +12,9 @@ public final class TaskItem {
     /// Total focused time banked against this task.
     public var secondsSpent: Double = 0
     public var order: Int = 0
+    /// Persisted as a string so adding cases never breaks an existing store.
+    public var statusRaw: String = TaskStatus.notStarted.rawValue
+    public var note: String = ""
 
     public init(
         id: UUID = UUID(),
@@ -20,7 +23,9 @@ public final class TaskItem {
         completedAt: Date? = nil,
         plannedMinutes: Int? = nil,
         secondsSpent: Double = 0,
-        order: Int = 0
+        order: Int = 0,
+        status: TaskStatus = .notStarted,
+        note: String = ""
     ) {
         self.id = id
         self.title = title
@@ -29,9 +34,16 @@ public final class TaskItem {
         self.plannedMinutes = plannedMinutes
         self.secondsSpent = secondsSpent
         self.order = order
+        self.statusRaw = status.rawValue
+        self.note = note
     }
 
-    public var isDone: Bool { completedAt != nil }
+    public var status: TaskStatus {
+        get { TaskStatus(rawValue: statusRaw) ?? .notStarted }
+        set { statusRaw = newValue.rawValue }
+    }
+
+    public var isDone: Bool { status == .done }
 }
 
 @Model
@@ -63,5 +75,18 @@ public final class FocusSessionRecord {
         self.plannedMinutes = plannedMinutes
         self.secondsFocused = secondsFocused
         self.completedTask = completedTask
+    }
+}
+
+
+/// The single global notes pane. One row, created on demand.
+@Model
+public final class Scratchpad {
+    public var text: String = ""
+    public var updatedAt: Date = Date()
+
+    public init(text: String = "", updatedAt: Date = Date()) {
+        self.text = text
+        self.updatedAt = updatedAt
     }
 }

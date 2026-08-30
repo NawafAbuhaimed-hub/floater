@@ -11,10 +11,30 @@ public final class Store {
     public var context: ModelContext { container.mainContext }
 
     public init(inMemory: Bool = false) throws {
-        let schema = Schema([TaskItem.self, FocusSessionRecord.self])
+        let schema = Schema([TaskItem.self, FocusSessionRecord.self, Scratchpad.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         container = try ModelContainer(for: schema, configurations: [config])
         reload()
+        reconcileLegacyStatuses()
+    }
+
+    /// Reopens an existing container — used to exercise what happens on the
+    /// next launch against a store that already has rows in it.
+    public init(container: ModelContainer) {
+        self.container = container
+        reload()
+        reconcileLegacyStatuses()
+    }
+
+    /// Tasks created before statuses existed only carry `completedAt`. Without
+    /// this they would come back as "Not started" despite being finished.
+    private func reconcileLegacyStatuses() {
+        var changed = false
+        for task in tasks where task.completedAt != nil && task.status == .notStarted {
+            task.status = .done
+            changed = true
+        }
+        if changed { save() }
     }
 
     public func reload() {
@@ -27,6 +47,10 @@ public final class Store {
     // MARK: - Queries
 
     public var openTasks: [TaskItem] { tasks.filter { !$0.isDone } }
+
+    public func tasks(withStatus status: TaskStatus) -> [TaskItem] {
+        tasks.filter { $0.status == status }
+    }
 
     public func completedOn(_ day: Date, calendar: Calendar = .current) -> [TaskItem] {
         tasks.filter { task in
@@ -51,13 +75,29 @@ public final class Store {
     }
 
     public func complete(_ task: TaskItem, at date: Date = Date(), addingSeconds seconds: Double = 0) {
+        task.status = .done
         task.completedAt = date
         task.secondsSpent += max(0, seconds)
         save()
     }
 
     public func reopen(_ task: TaskItem) {
+        task.status = .notStarted
         task.completedAt = nil
+        save()
+    }
+
+    /// `completedAt` is kept in lockstep with the status so "done today" stays
+    /// accurate however the task got there.
+    public func setStatus(_ status: TaskStatus, for task: TaskItem, at date: Date = Date()) {
+        task.status = status
+        task.completedAt = status == .done ? (task.completedAt ?? date) : nil
+        save()
+    }
+
+    public func updateNote(_ note: String, forTaskWith id: UUID) {
+        guard let task = task(id: id), task.note != note else { return }
+        task.note = note
         save()
     }
 
@@ -88,6 +128,30 @@ public final class Store {
             context.delete(task)
         }
         save()
+    }
+
+    // MARK: - Scratchpad
+
+    /// The global notes pane, created the first time it is asked for.
+    public var scratchpadText: String {
+        get { scratchpad().text }
+        set {
+            let pad = scratchpad()
+            guard pad.text != newValue else { return }
+            pad.text = newValue
+            pad.updatedAt = Date()
+            try? context.save()
+        }
+    }
+
+    private func scratchpad() -> Scratchpad {
+        if let existing = try? context.fetch(FetchDescriptor<Scratchpad>()).first {
+            return existing
+        }
+        let pad = Scratchpad()
+        context.insert(pad)
+        try? context.save()
+        return pad
     }
 
     private func save() {

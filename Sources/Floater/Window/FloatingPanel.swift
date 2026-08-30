@@ -7,10 +7,12 @@ import AppKit
 /// pulling focus away from whatever app you were working in, while still being
 /// able to become key so the text field receives keystrokes.
 final class FloatingPanel: NSPanel {
-    init(contentRect: NSRect, interactive: Bool = true) {
+    init(contentRect: NSRect, interactive: Bool = true, resizable: Bool = false) {
+        var style: NSWindow.StyleMask = [.borderless, .nonactivatingPanel]
+        if resizable { style.insert(.resizable) }
         super.init(
             contentRect: contentRect,
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: style,
             backing: .buffered,
             defer: false
         )

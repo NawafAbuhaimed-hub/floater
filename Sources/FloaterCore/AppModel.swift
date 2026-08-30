@@ -6,6 +6,11 @@ import Combine
 @MainActor
 public final class AppModel: ObservableObject {
     public enum Mode { case collapsed, expanded }
+    public enum Tab: String, CaseIterable, Identifiable {
+        case tasks, notes
+        public var id: String { rawValue }
+        public var title: String { self == .tasks ? "Tasks" : "Notes" }
+    }
 
     // Published state
     @Published public private(set) var tasks: [TaskItem] = []
@@ -19,7 +24,13 @@ public final class AppModel: ObservableObject {
     /// Bumped whenever the pill should visibly demand attention.
     @Published public private(set) var attentionPulse: Int = 0
     @Published public var mode: Mode = .collapsed
+    @Published public var tab: Tab = .tasks
+    /// The task whose note is open inline, if any.
+    @Published public var expandedTaskID: UUID?
     @Published public var draft: String = ""
+    /// Global notes pane. Written through to the store on a short debounce so
+    /// typing does not hit SwiftData on every keystroke.
+    @Published public var scratchpad: String = ""
     @Published public var soundEnabled: Bool {
         didSet { prefs.soundEnabled = soundEnabled }
     }
@@ -40,6 +51,8 @@ public final class AppModel: ObservableObject {
     private let clock: Clock
     private var ticker: Timer?
     private var runStartedAt: Date?
+    private var cancellables = Set<AnyCancellable>()
+    private let noteEdits = PassthroughSubject<(id: UUID, text: String), Never>()
 
     public init(
         store: Store,
@@ -56,14 +69,17 @@ public final class AppModel: ObservableObject {
         engine.onElapsed = { [weak self] run in
             self?.handleElapsed(run)
         }
+        self.scratchpad = store.scratchpadText
         restoreActiveRun()
         refresh()
+        startDebouncedWrites()
         if autoTick { startTicking() }
     }
 
     deinit { ticker?.invalidate() }
 
     public var openTasks: [TaskItem] { tasks.filter { !$0.isDone } }
+    public var doneCount: Int { tasks.count - openTasks.count }
     public var isRunning: Bool { phase == .running }
     public var isActive: Bool { phase != .idle }
     public var activeTask: TaskItem? { activeTaskID.flatMap { id in tasks.first { $0.id == id } } }
@@ -105,11 +121,48 @@ public final class AppModel: ObservableObject {
         refresh()
     }
 
+    /// Setting a task to Done runs the full completion path (time banked,
+    /// confetti). Moving the *running* task to anything else stops its timer,
+    /// because you are no longer working on it.
+    public func setStatus(_ status: TaskStatus, for task: TaskItem) {
+        guard task.status != status else { return }
+        if status == .done {
+            complete(task)
+            return
+        }
+        if task.id == activeTaskID {
+            _ = finishActiveRun(completedTask: false)
+        }
+        store.setStatus(status, for: task, at: clock.now)
+        refresh()
+    }
+
+    /// The one-click path on the status dot.
+    public func toggleDone(_ task: TaskItem) {
+        if task.isDone {
+            store.reopen(task)
+            refresh()
+        } else {
+            complete(task)
+        }
+    }
+
+    public func toggleNote(for task: TaskItem) {
+        expandedTaskID = expandedTaskID == task.id ? nil : task.id
+    }
+
+    public func noteChanged(_ text: String, for task: TaskItem) {
+        noteEdits.send((id: task.id, text: text))
+    }
+
     // MARK: - Timer actions
 
     public func start(_ task: TaskItem, minutes: Int) {
         if engine.isActive { _ = finishActiveRun(completedTask: false) }
         store.rememberPlan(minutes: minutes, forTaskWith: task.id)
+        if task.status != .inProgress {
+            store.setStatus(.inProgress, for: task, at: clock.now)
+        }
         runStartedAt = clock.now
         engine.start(taskID: task.id, title: task.title, minutes: minutes)
         mode = .collapsed
@@ -187,6 +240,25 @@ public final class AppModel: ObservableObject {
         guard let saved = prefs.loadActiveRun() else { return }
         runStartedAt = saved.run.startedAt
         engine.restore(saved.run, phase: saved.phase)
+    }
+
+    /// Note and scratchpad edits land on a short debounce; every other write is
+    /// immediate.
+    private func startDebouncedWrites() {
+        noteEdits
+            .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
+            .sink { [weak self] edit in
+                guard let self else { return }
+                self.store.updateNote(edit.text, forTaskWith: edit.id)
+                self.refresh()
+            }
+            .store(in: &cancellables)
+
+        $scratchpad
+            .dropFirst()
+            .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
+            .sink { [weak self] text in self?.store.scratchpadText = text }
+            .store(in: &cancellables)
     }
 
     private func startTicking() {

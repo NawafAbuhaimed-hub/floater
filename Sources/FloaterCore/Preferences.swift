@@ -26,6 +26,8 @@ public final class Preferences {
         static let soundEnabled = "floater.soundEnabled"
         static let takeoverEnabled = "floater.takeoverEnabled"
         static let panelOrigin = "floater.panelOrigin"
+        static let collapsedSize = "floater.collapsedSize"
+        static let expandedSize = "floater.expandedSize"
         static let activeRun = "floater.activeRun"
         static let activePhase = "floater.activePhase"
     }
@@ -55,6 +57,28 @@ public final class Preferences {
             guard let newValue else { return store.removeObject(forKey: Key.panelOrigin) }
             store.set(["x": newValue.x, "y": newValue.y], forKey: Key.panelOrigin)
         }
+    }
+
+    /// Sizes the user dragged the panel to, remembered per mode.
+    public var collapsedSize: CGSize? {
+        get { size(forKey: Key.collapsedSize) }
+        set { setSize(newValue, forKey: Key.collapsedSize) }
+    }
+
+    public var expandedSize: CGSize? {
+        get { size(forKey: Key.expandedSize) }
+        set { setSize(newValue, forKey: Key.expandedSize) }
+    }
+
+    private func size(forKey key: String) -> CGSize? {
+        guard let dict = store.object(forKey: key) as? [String: Any],
+              let w = dict["w"] as? Double, let h = dict["h"] as? Double else { return nil }
+        return CGSize(width: w, height: h)
+    }
+
+    private func setSize(_ value: CGSize?, forKey key: String) {
+        guard let value else { return store.removeObject(forKey: key) }
+        store.set(["w": value.width, "h": value.height], forKey: key)
     }
 
     /// The in-flight focus run, so quitting or crashing does not lose the countdown.

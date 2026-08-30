@@ -1,7 +1,8 @@
-import SwiftUI
 import FloaterCore
+import SwiftUI
 
-/// The expanded panel: add a task, start a timer on it, tick it off.
+/// The expanded panel: add a task, set its status, start a timer on it, take
+/// notes. The header doubles as the drag handle.
 struct ExpandedView: View {
     @EnvironmentObject private var model: AppModel
     @FocusState private var draftFocused: Bool
@@ -10,36 +11,42 @@ struct ExpandedView: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            composer
-            if model.isActive { activeCard }
-            Divider().opacity(0.5)
-            list
-            footer
+            if model.tab == .tasks {
+                composer
+                if model.isActive { activeCard }
+                Divider().opacity(0.5)
+                taskList
+                footer
+            } else {
+                notesPane
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(GlassBackground(cornerRadius: Theme.corner))
+        .overlay(alignment: .bottomTrailing) {
+            ResizeGrip().padding(5)
+        }
         .padding(6)
-        .onAppear { draftFocused = true }
+        .onAppear { draftFocused = model.tab == .tasks }
     }
 
-    // MARK: - Header (also the drag handle)
+    // MARK: - Header
 
     private var header: some View {
         HStack(spacing: 8) {
             Image(systemName: "timer")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Theme.accent)
-            Text("Floater")
-                .font(.system(size: 13, weight: .semibold))
-            Spacer()
+            TabSwitcher(selection: $model.tab)
+            Spacer(minLength: 4)
             PillButton(symbol: "chevron.down") { model.mode = .collapsed }
                 .help("Collapse")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
     }
 
-    // MARK: - Composer
+    // MARK: - Tasks
 
     private var composer: some View {
         HStack(spacing: 8) {
@@ -54,8 +61,6 @@ struct ExpandedView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
     }
-
-    // MARK: - Active run
 
     private var activeCard: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -91,15 +96,13 @@ struct ExpandedView: View {
         .background(Color.primary.opacity(0.04))
     }
 
-    // MARK: - Task list
-
-    private var list: some View {
+    private var taskList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                if model.openTasks.isEmpty {
+                if model.tasks.isEmpty {
                     emptyState
                 }
-                ForEach(model.openTasks, id: \.id) { task in
+                ForEach(model.tasks, id: \.id) { task in
                     TaskRow(task: task)
                     Divider().opacity(0.25).padding(.leading, 40)
                 }
@@ -113,15 +116,13 @@ struct ExpandedView: View {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 22))
                 .foregroundStyle(.tertiary)
-            Text(model.completedToday > 0 ? "All clear. Nice." : "Add your first task above.")
+            Text("Add your first task above.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 36)
     }
-
-    // MARK: - Footer
 
     private var footer: some View {
         HStack(spacing: 6) {
@@ -132,8 +133,8 @@ struct ExpandedView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Spacer()
-            if model.completedToday > 0 {
-                Button("Clear") { model.clearCompleted() }
+            if model.doneCount > 0 {
+                Button("Clear done") { model.clearCompleted() }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
@@ -141,45 +142,148 @@ struct ExpandedView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
+        .padding(.trailing, 16) // clear of the resize grip
+    }
+
+    // MARK: - Notes
+
+    private var notesPane: some View {
+        ZStack(alignment: .topLeading) {
+            NoteEditor(text: $model.scratchpad)
+            if model.scratchpad.isEmpty {
+                Text("Anything that isn't a task — links, thoughts, numbers to remember.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(.bottom, 14)
     }
 }
 
-/// One open task: tick it off, or start a 15/30/45 timer on it.
+/// Tasks | Notes.
+struct TabSwitcher: View {
+    @Binding var selection: AppModel.Tab
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(AppModel.Tab.allCases) { tab in
+                Button { selection = tab } label: {
+                    Text(tab.title)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(selection == tab ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule().fill(Color.primary.opacity(selection == tab ? 0.12 : 0))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+/// One task: status dot, title, timer chips, and an inline note.
 struct TaskRow: View {
     let task: TaskItem
     @EnvironmentObject private var model: AppModel
     @State private var hovering = false
 
     private var isActive: Bool { task.id == model.activeTaskID }
+    private var isNoteOpen: Bool { model.expandedTaskID == task.id }
+    private var statusColor: Color { Theme.color(for: task.status) }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            mainRow
+            if isNoteOpen { noteSection }
+        }
+        .background(hovering ? Color.primary.opacity(0.05) : .clear)
+        .contentShape(Rectangle())
+        .onHover { hovering = $0 }
+        .contextMenu {
+            ForEach(TaskStatus.allCases) { status in
+                Button {
+                    model.setStatus(status, for: task)
+                } label: {
+                    Label(status.title, systemImage: status.symbol)
+                }
+                .disabled(task.status == status)
+            }
+            Divider()
+            Button(isNoteOpen ? "Hide note" : "Add note") { model.toggleNote(for: task) }
+            Button("Delete", role: .destructive) { model.delete(task) }
+        }
+    }
+
+    private var mainRow: some View {
         HStack(spacing: 10) {
-            Button { model.complete(task) } label: {
-                Image(systemName: "circle")
-                    .font(.system(size: 15, weight: .light))
-                    .foregroundStyle(hovering ? Theme.accent : .secondary)
+            Button { model.toggleDone(task) } label: {
+                Image(systemName: task.status.symbol)
+                    .font(.system(size: 14, weight: task.isDone ? .regular : .light))
+                    .foregroundStyle(statusColor)
+                    .frame(width: 16)
             }
             .buttonStyle(.plain)
-            .help("Mark done")
+            .help(task.isDone ? "Reopen" : "Mark done")
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(task.title)
-                    .font(.system(size: 12.5))
-                    .lineLimit(2)
-                if task.secondsSpent > 0 {
-                    Text(task.secondsSpent.compactDuration + " focused")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
+            Button { model.toggleNote(for: task) } label: {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(task.title)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(task.isDone ? .secondary : .primary)
+                        .strikethrough(task.isDone, color: .secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    subtitle
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open note")
+
+            trailingControls
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+    }
+
+    @ViewBuilder
+    private var subtitle: some View {
+        let parts = [
+            task.status == .notStarted ? nil : task.status.title,
+            task.secondsSpent > 0 ? task.secondsSpent.compactDuration + " focused" : nil,
+            task.note.isEmpty ? nil : "note",
+        ].compactMap { $0 }
+
+        if !parts.isEmpty {
+            HStack(spacing: 5) {
+                ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                    if index > 0 {
+                        Text("·").foregroundStyle(.quaternary)
+                    }
+                    Text(part)
+                        .foregroundStyle(index == 0 && task.status != .notStarted
+                                         ? AnyShapeStyle(statusColor) : AnyShapeStyle(.tertiary))
                 }
             }
-            Spacer(minLength: 4)
+            .font(.system(size: 10))
+        }
+    }
 
-            if isActive {
-                Image(systemName: "waveform")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
-            } else if hovering {
-                HStack(spacing: 3) {
+    @ViewBuilder
+    private var trailingControls: some View {
+        if isActive {
+            Image(systemName: "waveform")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+        } else if hovering {
+            HStack(spacing: 3) {
+                if !task.isDone {
                     ForEach(model.timerLengths, id: \.self) { minutes in
                         Button("\(minutes)") { model.start(task, minutes: minutes) }
                             .buttonStyle(.plain)
@@ -188,24 +292,96 @@ struct TaskRow: View {
                             .background(Capsule().fill(Color.primary.opacity(0.1)))
                             .help("Focus for \(minutes) minutes")
                     }
-                    Button {
-                        model.delete(task)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.tertiary)
-                            .frame(width: 18, height: 20)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Delete")
                 }
+                Button {
+                    model.delete(task)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                        .frame(width: 18, height: 20)
+                }
+                .buttonStyle(.plain)
+                .help("Delete")
             }
         }
+    }
+
+    private var noteSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            StatusPicker(current: task.status) { model.setStatus($0, for: task) }
+            NoteEditor(
+                text: Binding(
+                    get: { task.note },
+                    set: { model.noteChanged($0, for: task) }
+                ),
+                minHeight: 68,
+                placeholder: "Notes for this task…"
+            )
+        }
         .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .background(hovering ? Color.primary.opacity(0.05) : .clear)
-        .contentShape(Rectangle())
-        .onHover { hovering = $0 }
+        .padding(.bottom, 11)
+    }
+}
+
+/// Four colored chips, one per status.
+struct StatusPicker: View {
+    let current: TaskStatus
+    let onSelect: (TaskStatus) -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(TaskStatus.allCases) { status in
+                let selected = status == current
+                let color = Theme.color(for: status)
+                Button { onSelect(status) } label: {
+                    HStack(spacing: 4) {
+                        Circle().fill(color).frame(width: 6, height: 6)
+                        Text(status.title)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(selected ? Color.primary : Color.secondary)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(color.opacity(selected ? 0.22 : 0.07))
+                            .overlay(
+                                Capsule().strokeBorder(color.opacity(selected ? 0.7 : 0), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+/// A transparent, borderless text editor with a placeholder.
+struct NoteEditor: View {
+    @Binding var text: String
+    var minHeight: CGFloat = 0
+    var placeholder: String = ""
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.primary.opacity(minHeight > 0 ? 0.05 : 0))
+            TextEditor(text: $text)
+                .font(.system(size: 12))
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, minHeight > 0 ? 6 : 12)
+                .padding(.vertical, minHeight > 0 ? 4 : 8)
+            if text.isEmpty && !placeholder.isEmpty {
+                Text(placeholder)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, minHeight > 0 ? 11 : 17)
+                    .padding(.vertical, minHeight > 0 ? 12 : 16)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(minHeight: minHeight > 0 ? minHeight : nil, maxHeight: minHeight > 0 ? minHeight : .infinity)
     }
 }
 
