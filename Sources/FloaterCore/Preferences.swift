@@ -1,9 +1,26 @@
 import Foundation
 
-/// Everything Floater remembers between launches. Backed by UserDefaults, but
-/// injectable so tests never touch the real domain.
+/// The slice of `UserDefaults` that `Preferences` needs. Abstracting it keeps
+/// tests entirely in memory instead of writing preference files to disk.
+public protocol KeyValueStore: AnyObject {
+    func object(forKey key: String) -> Any?
+    func set(_ value: Any?, forKey key: String)
+    func removeObject(forKey key: String)
+}
+
+extension UserDefaults: KeyValueStore {}
+
+public final class InMemoryStore: KeyValueStore {
+    private var values: [String: Any] = [:]
+    public init() {}
+    public func object(forKey key: String) -> Any? { values[key] }
+    public func set(_ value: Any?, forKey key: String) { values[key] = value }
+    public func removeObject(forKey key: String) { values[key] = nil }
+}
+
+/// Everything Floater remembers between launches.
 public final class Preferences {
-    private let defaults: UserDefaults
+    private let store: KeyValueStore
 
     private enum Key {
         static let soundEnabled = "floater.soundEnabled"
@@ -13,53 +30,50 @@ public final class Preferences {
         static let activePhase = "floater.activePhase"
     }
 
-    public init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        defaults.register(defaults: [
-            Key.soundEnabled: true,
-            Key.takeoverEnabled: true,
-        ])
+    public init(store: KeyValueStore = UserDefaults.standard) {
+        self.store = store
     }
 
+    /// Both toggles default to on, so an absent value reads as `true`.
     public var soundEnabled: Bool {
-        get { defaults.bool(forKey: Key.soundEnabled) }
-        set { defaults.set(newValue, forKey: Key.soundEnabled) }
+        get { store.object(forKey: Key.soundEnabled) as? Bool ?? true }
+        set { store.set(newValue, forKey: Key.soundEnabled) }
     }
 
     public var takeoverEnabled: Bool {
-        get { defaults.bool(forKey: Key.takeoverEnabled) }
-        set { defaults.set(newValue, forKey: Key.takeoverEnabled) }
+        get { store.object(forKey: Key.takeoverEnabled) as? Bool ?? true }
+        set { store.set(newValue, forKey: Key.takeoverEnabled) }
     }
 
     public var panelOrigin: CGPoint? {
         get {
-            guard let dict = defaults.dictionary(forKey: Key.panelOrigin),
+            guard let dict = store.object(forKey: Key.panelOrigin) as? [String: Any],
                   let x = dict["x"] as? Double, let y = dict["y"] as? Double else { return nil }
             return CGPoint(x: x, y: y)
         }
         set {
-            guard let newValue else { return defaults.removeObject(forKey: Key.panelOrigin) }
-            defaults.set(["x": newValue.x, "y": newValue.y], forKey: Key.panelOrigin)
+            guard let newValue else { return store.removeObject(forKey: Key.panelOrigin) }
+            store.set(["x": newValue.x, "y": newValue.y], forKey: Key.panelOrigin)
         }
     }
 
     /// The in-flight focus run, so quitting or crashing does not lose the countdown.
     public func saveActiveRun(_ run: FocusRun?, phase: TimerPhase) {
         guard let run, phase != .idle else {
-            defaults.removeObject(forKey: Key.activeRun)
-            defaults.removeObject(forKey: Key.activePhase)
+            store.removeObject(forKey: Key.activeRun)
+            store.removeObject(forKey: Key.activePhase)
             return
         }
         if let data = try? JSONEncoder().encode(run) {
-            defaults.set(data, forKey: Key.activeRun)
-            defaults.set(phase.rawValue, forKey: Key.activePhase)
+            store.set(data, forKey: Key.activeRun)
+            store.set(phase.rawValue, forKey: Key.activePhase)
         }
     }
 
     public func loadActiveRun() -> (run: FocusRun, phase: TimerPhase)? {
-        guard let data = defaults.data(forKey: Key.activeRun),
+        guard let data = store.object(forKey: Key.activeRun) as? Data,
               let run = try? JSONDecoder().decode(FocusRun.self, from: data),
-              let raw = defaults.string(forKey: Key.activePhase),
+              let raw = store.object(forKey: Key.activePhase) as? String,
               let phase = TimerPhase(rawValue: raw) else { return nil }
         return (run, phase)
     }

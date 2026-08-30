@@ -5,25 +5,18 @@ import XCTest
 final class AppModelTests: XCTestCase {
     private var clock: TestClock!
     private var model: AppModel!
-    private var defaults: UserDefaults!
-    private var suiteName: String!
+    private var prefStore: InMemoryStore!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
         clock = TestClock()
-        suiteName = "floater.tests.\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suiteName)
+        prefStore = InMemoryStore()
         model = AppModel(
             store: try Store(inMemory: true),
-            prefs: Preferences(defaults: defaults),
+            prefs: Preferences(store: prefStore),
             clock: clock,
             autoTick: false
         )
-    }
-
-    override func tearDown() {
-        defaults.removePersistentDomain(forName: suiteName)
-        super.tearDown()
     }
 
     @discardableResult
@@ -205,7 +198,7 @@ final class AppModelTests: XCTestCase {
     // MARK: - Persistence
 
     func testAnInFlightRunSurvivesRelaunch() throws {
-        let prefs = Preferences(defaults: defaults)
+        let prefs = Preferences(store: prefStore)
         let store = try Store(inMemory: true)
         let first = AppModel(store: store, prefs: prefs, clock: clock, autoTick: false)
         first.draft = "Long haul"
@@ -224,7 +217,7 @@ final class AppModelTests: XCTestCase {
     }
 
     func testARunThatExpiredWhileQuitFiresTimeUpOnRelaunch() throws {
-        let prefs = Preferences(defaults: defaults)
+        let prefs = Preferences(store: prefStore)
         let store = try Store(inMemory: true)
         let first = AppModel(store: store, prefs: prefs, clock: clock, autoTick: false)
         first.draft = "Expired while away"
@@ -242,7 +235,7 @@ final class AppModelTests: XCTestCase {
     func testSettingsRoundTripThroughPreferences() {
         model.soundEnabled = false
         model.takeoverEnabled = false
-        let reloaded = Preferences(defaults: defaults)
+        let reloaded = Preferences(store: prefStore)
         XCTAssertFalse(reloaded.soundEnabled)
         XCTAssertFalse(reloaded.takeoverEnabled)
     }
