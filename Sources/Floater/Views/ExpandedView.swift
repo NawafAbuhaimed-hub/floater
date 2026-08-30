@@ -221,14 +221,14 @@ struct TaskRow: View {
 
     private var mainRow: some View {
         HStack(spacing: 10) {
-            Button { model.toggleDone(task) } label: {
+            Button { model.advanceStatus(task) } label: {
                 Image(systemName: task.status.symbol)
-                    .font(.system(size: 14, weight: task.isDone ? .regular : .light))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(statusColor)
-                    .frame(width: 16)
+                    .frame(width: 17)
             }
             .buttonStyle(.plain)
-            .help(task.isDone ? "Reopen" : "Mark done")
+            .help(task.isDone ? "Reopen" : "Change status")
 
             Button { model.toggleNote(for: task) } label: {
                 VStack(alignment: .leading, spacing: 1) {
@@ -252,27 +252,26 @@ struct TaskRow: View {
         .padding(.vertical, 9)
     }
 
-    @ViewBuilder
+    /// The status label is always on screen — a task with no timer and no note
+    /// still has to show what state it is in.
     private var subtitle: some View {
-        let parts = [
-            task.status == .notStarted ? nil : task.status.title,
-            task.secondsSpent > 0 ? task.secondsSpent.compactDuration + " focused" : nil,
-            task.note.isEmpty ? nil : "note",
-        ].compactMap { $0 }
-
-        if !parts.isEmpty {
-            HStack(spacing: 5) {
-                ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
-                    if index > 0 {
-                        Text("·").foregroundStyle(.quaternary)
-                    }
-                    Text(part)
-                        .foregroundStyle(index == 0 && task.status != .notStarted
-                                         ? AnyShapeStyle(statusColor) : AnyShapeStyle(.tertiary))
-                }
+        HStack(spacing: 4) {
+            Text(task.status.title)
+                .foregroundStyle(statusColor)
+                .fontWeight(.medium)
+            if task.secondsSpent > 0 {
+                Text("·").foregroundStyle(.quaternary)
+                Text(task.secondsSpent.compactDuration + " focused")
+                    .foregroundStyle(.tertiary)
             }
-            .font(.system(size: 10))
+            if !task.note.isEmpty {
+                Text("·").foregroundStyle(.quaternary)
+                Image(systemName: "note.text")
+                    .foregroundStyle(.tertiary)
+            }
         }
+        .font(.system(size: 10))
+        .lineLimit(1)
     }
 
     @ViewBuilder
@@ -284,6 +283,17 @@ struct TaskRow: View {
         } else if hovering {
             HStack(spacing: 3) {
                 if !task.isDone {
+                    Button {
+                        model.complete(task)
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Theme.accent)
+                            .frame(width: 20, height: 20)
+                            .background(Circle().fill(Theme.accent.opacity(0.14)))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Mark done")
                     ForEach(model.timerLengths, id: \.self) { minutes in
                         Button("\(minutes)") { model.start(task, minutes: minutes) }
                             .buttonStyle(.plain)

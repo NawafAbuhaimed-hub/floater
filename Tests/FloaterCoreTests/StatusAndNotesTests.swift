@@ -193,3 +193,77 @@ final class StatusAndNotesTests: XCTestCase {
         XCTAssertEqual(revived.scratchpad, "carried over")
     }
 }
+
+@MainActor
+final class StatusCyclingTests: XCTestCase {
+    private var clock: TestClock!
+    private var store: Store!
+    private var model: AppModel!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        clock = TestClock()
+        store = try Store(inMemory: true)
+        model = AppModel(store: store, prefs: Preferences(store: InMemoryStore()),
+                         clock: clock, autoTick: false)
+    }
+
+    @discardableResult
+    private func addTask(_ title: String) -> TaskItem {
+        model.draft = title
+        model.addDraftTask()
+        return model.tasks.first { $0.title == title }!
+    }
+
+    private func reread(_ task: TaskItem) -> TaskItem {
+        model.tasks.first { $0.id == task.id }!
+    }
+
+    func testTheDotCyclesThroughTheOpenStatusesOnly() {
+        let task = addTask("Cycle me")
+        XCTAssertEqual(reread(task).status, .notStarted)
+
+        model.advanceStatus(reread(task))
+        XCTAssertEqual(reread(task).status, .inProgress)
+
+        model.advanceStatus(reread(task))
+        XCTAssertEqual(reread(task).status, .blocked)
+
+        model.advanceStatus(reread(task))
+        XCTAssertEqual(reread(task).status, .notStarted, "cycles back rather than landing on Done")
+    }
+
+    func testCyclingNeverFiresTheCelebration() {
+        let task = addTask("No confetti")
+        var celebrated = 0
+        model.onCelebrate = { _ in celebrated += 1 }
+
+        for _ in 0..<6 { model.advanceStatus(reread(task)) }
+
+        XCTAssertEqual(celebrated, 0, "Done has its own button; cycling must not set off confetti")
+    }
+
+    func testCyclingADoneTaskReopensIt() {
+        let task = addTask("Reopen via dot")
+        model.complete(task)
+        XCTAssertEqual(reread(task).status, .done)
+
+        model.advanceStatus(reread(task))
+        let saved = reread(task)
+        XCTAssertEqual(saved.status, .notStarted)
+        XCTAssertNil(saved.completedAt)
+    }
+
+    func testCyclingOffInProgressStopsTheRunningTimer() {
+        let task = addTask("Running")
+        model.start(task, minutes: 15)
+        clock.advance(120)
+        XCTAssertEqual(reread(task).status, .inProgress)
+
+        model.advanceStatus(reread(task))
+
+        XCTAssertEqual(reread(task).status, .blocked)
+        XCTAssertFalse(model.isActive)
+        XCTAssertEqual(reread(task).secondsSpent, 120, accuracy: 0.5)
+    }
+}

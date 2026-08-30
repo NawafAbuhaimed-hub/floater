@@ -31,11 +31,13 @@ struct GlassBackground: View {
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(.regularMaterial)
+            // A white rim reads as a highlight in both appearances. `Color.primary`
+            // resolves to black in light mode, which drew a hard black hairline.
             .overlay(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.28), radius: 18, y: 6)
+            .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
     }
 }
 

@@ -6,7 +6,7 @@ import Combine
 /// Owns the pill panel: how big it is in each mode, where it lives, and keeping
 /// it inside a display that actually exists.
 @MainActor
-final class FloatingPanelController: NSObject, NSWindowDelegate {
+final class FloatingPanelController {
     static let defaultCollapsed = CGSize(width: 300, height: 56)
     static let defaultExpanded = CGSize(width: 360, height: 520)
 
@@ -25,8 +25,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         self.model = model
         self.prefs = prefs
         let size = Self.clampSize(prefs.collapsedSize ?? Self.defaultCollapsed, to: Self.collapsedBounds)
-        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size), resizable: true)
-        super.init()
+        panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size))
 
         panel.onCancel = { [weak model] in model?.mode = .collapsed }
 
@@ -48,8 +47,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.contentView = hosting
         defer { resizer.handler = { [weak self] delta in self?.resizeBy(delta) } }
 
-        panel.delegate = self
-        applyLimits(for: model.mode)
         placeAtSavedOrDefaultOrigin(size: size)
 
         model.$mode
@@ -62,12 +59,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 self.prefs.panelOrigin = self.panel.frame.origin
             }
-            .store(in: &cancellables)
-
-        // `didEndLiveResize` fires only for a user dragging an edge or corner,
-        // so our own animated mode changes never overwrite the saved size.
-        NotificationCenter.default.publisher(for: NSWindow.didEndLiveResizeNotification, object: panel)
-            .sink { [weak self] _ in self?.rememberSize() }
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
@@ -99,19 +90,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     private var currentBounds: (min: CGSize, max: CGSize) {
         model.mode == .collapsed ? Self.collapsedBounds : Self.expandedBounds
-    }
-
-    private func applyLimits(for mode: AppModel.Mode) {
-        let bounds = mode == .collapsed ? Self.collapsedBounds : Self.expandedBounds
-        panel.minSize = bounds.min
-        panel.maxSize = bounds.max
-    }
-
-    /// `minSize`/`maxSize` are not honoured on a borderless panel, so the size
-    /// a user drags an edge to is clamped here instead. The pill's fixed height
-    /// falls out of this too.
-    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
-        Self.clampSize(frameSize, to: currentBounds)
     }
 
     private func rememberSize() {
@@ -150,7 +128,6 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     // MARK: - Layout
 
     private func apply(mode: AppModel.Mode) {
-        applyLimits(for: mode)
         let target = size(for: mode)
         let current = panel.frame
         // Grow downward from the current top-left corner so the pill stays put.

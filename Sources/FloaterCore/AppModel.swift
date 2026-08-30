@@ -137,6 +137,18 @@ public final class AppModel: ObservableObject {
         refresh()
     }
 
+    /// Click-through order on the status dot. Deliberately skips Done so you
+    /// cannot set off the confetti just by cycling; Done has its own button.
+    public func advanceStatus(_ task: TaskItem) {
+        if task.isDone {
+            setStatus(.notStarted, for: task)
+            return
+        }
+        let cycle: [TaskStatus] = [.notStarted, .inProgress, .blocked]
+        let next = cycle[((cycle.firstIndex(of: task.status) ?? 0) + 1) % cycle.count]
+        setStatus(next, for: task)
+    }
+
     /// The one-click path on the status dot.
     public func toggleDone(_ task: TaskItem) {
         if task.isDone {
