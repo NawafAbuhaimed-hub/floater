@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController!
     private let celebration = OverlayWindowController(interactive: false)
     private let takeover = OverlayWindowController(interactive: true)
+    private let followUpPrompt = AnchoredPanelController()
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -31,6 +32,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onCelebrate = { [weak self] title in self?.celebrate(title) }
         model.onTimeUp = { [weak self] run in self?.showTimeUp(run) }
         model.onDismissTimeUp = { [weak self] in self?.takeover.dismiss() }
+        model.scheduler = EventKitScheduler()
+
+        // The prompt appears with the confetti and clears itself unless the user
+        // starts interacting with it.
+        model.$pendingFollowUp
+            .removeDuplicates { $0?.id == $1?.id }
+            .sink { [weak self] pending in
+                guard let self else { return }
+                if pending == nil { self.followUpPrompt.dismiss() } else { self.showFollowUpPrompt() }
+            }
+            .store(in: &cancellables)
+
+        model.$followUpPromptPinned
+            .filter { $0 }
+            .sink { [weak self] _ in
+                self?.followUpPrompt.cancelAutoDismiss()
+                self?.followUpPrompt.takeFocus()
+            }
+            .store(in: &cancellables)
 
         // A run that ended while the machine was asleep should surface on wake.
         NSWorkspace.shared.notificationCenter
@@ -70,6 +90,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
             self?.celebration.dismiss()
+        }
+    }
+
+    // MARK: - Follow-up
+
+    private func showFollowUpPrompt() {
+        followUpPrompt.show(
+            size: CGSize(width: 340, height: 200),
+            anchoredTo: panelController.panel.frame,
+            autoDismissAfter: 8,
+            onAutoDismiss: { [weak self] in self?.model.dismissFollowUp() }
+        ) { [model] in
+            FollowUpPromptView().environmentObject(model!)
         }
     }
 

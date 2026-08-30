@@ -188,6 +188,12 @@ struct TabSwitcher: View {
 
 /// One task: status dot, title, timer chips, and an inline note.
 struct TaskRow: View {
+    static let followUpFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE d, HH:mm"
+        return formatter
+    }()
+
     let task: TaskItem
     @EnvironmentObject private var model: AppModel
     @State private var hovering = false
@@ -267,6 +273,13 @@ struct TaskRow: View {
             if !task.note.isEmpty {
                 Text("·").foregroundStyle(.quaternary)
                 Image(systemName: "note.text")
+                    .foregroundStyle(.tertiary)
+            }
+            if let followUp = model.followUp(for: task) {
+                Text("·").foregroundStyle(.quaternary)
+                Image(systemName: followUp.destination.symbol)
+                    .foregroundStyle(.tertiary)
+                Text(Self.followUpFormatter.string(from: followUp.scheduledFor))
                     .foregroundStyle(.tertiary)
             }
         }

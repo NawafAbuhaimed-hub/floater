@@ -7,11 +7,12 @@ import SwiftData
 public final class Store {
     public let container: ModelContainer
     public private(set) var tasks: [TaskItem] = []
+    public private(set) var followUps: [FollowUpRecord] = []
 
     public var context: ModelContext { container.mainContext }
 
     public init(inMemory: Bool = false) throws {
-        let schema = Schema([TaskItem.self, FocusSessionRecord.self, Scratchpad.self])
+        let schema = Schema([TaskItem.self, FocusSessionRecord.self, Scratchpad.self, FollowUpRecord.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         container = try ModelContainer(for: schema, configurations: [config])
         reload()
@@ -42,6 +43,7 @@ public final class Store {
             sortBy: [SortDescriptor(\.order), SortDescriptor(\.createdAt)]
         )
         tasks = (try? context.fetch(descriptor)) ?? []
+        reloadFollowUps()
     }
 
     // MARK: - Queries
@@ -128,6 +130,23 @@ public final class Store {
             context.delete(task)
         }
         save()
+    }
+
+    // MARK: - Follow-ups
+
+    public func record(_ followUp: FollowUpRecord) {
+        context.insert(followUp)
+        try? context.save()
+        reloadFollowUps()
+    }
+
+    /// The most recently created follow-up for a task, if any.
+    public func followUp(forTaskWith id: UUID) -> FollowUpRecord? {
+        followUps.filter { $0.taskID == id }.max { $0.createdAt < $1.createdAt }
+    }
+
+    private func reloadFollowUps() {
+        followUps = (try? context.fetch(FetchDescriptor<FollowUpRecord>())) ?? []
     }
 
     // MARK: - Scratchpad

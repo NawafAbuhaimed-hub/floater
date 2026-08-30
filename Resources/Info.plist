@@ -20,6 +20,14 @@
     <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+    <string>Floater adds follow-up events to your calendar when you finish a task.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Floater adds follow-up events to your calendar when you finish a task.</string>
+    <key>NSRemindersFullAccessUsageDescription</key>
+    <string>Floater adds follow-up reminders when you finish a task.</string>
+    <key>NSRemindersUsageDescription</key>
+    <string>Floater adds follow-up reminders when you finish a task.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSupportsAutomaticTermination</key>

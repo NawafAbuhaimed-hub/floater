@@ -6,6 +6,16 @@ import Combine
 @MainActor
 public final class AppModel: ObservableObject {
     public enum Mode { case collapsed, expanded }
+    /// A finished task that has not been answered about yet.
+    public struct PendingFollowUp: Identifiable, Equatable {
+        public let id = UUID()
+        public let taskID: UUID
+        public let taskTitle: String
+        public let note: String
+        public let secondsFocused: Double
+        public let completedAt: Date
+    }
+
     public enum Tab: String, CaseIterable, Identifiable {
         case tasks, notes
         public var id: String { rawValue }
@@ -23,6 +33,14 @@ public final class AppModel: ObservableObject {
     @Published public private(set) var completedToday: Int = 0
     /// Bumped whenever the pill should visibly demand attention.
     @Published public private(set) var attentionPulse: Int = 0
+    @Published public private(set) var pendingFollowUp: PendingFollowUp?
+    @Published public private(set) var followUpError: FollowUpError?
+    @Published public private(set) var isSchedulingFollowUp = false
+    /// Set once the prompt must stay put — a picker is open or an error is showing.
+    @Published public private(set) var followUpPromptPinned = false
+    @Published public var followUpDestination: FollowUpDestination {
+        didSet { prefs.followUpDestination = followUpDestination }
+    }
     @Published public var mode: Mode = .collapsed
     @Published public var tab: Tab = .tasks
     /// The task whose note is open inline, if any.
@@ -42,6 +60,9 @@ public final class AppModel: ObservableObject {
     public var onCelebrate: ((String) -> Void)?
     public var onTimeUp: ((FocusRun) -> Void)?
     public var onDismissTimeUp: (() -> Void)?
+    /// Writes to Calendar / Reminders. Injected by the app layer; nil in tests
+    /// that do not exercise follow-ups.
+    public var scheduler: FollowUpScheduling?
 
     public let timerLengths = [15, 30, 45]
 
@@ -49,6 +70,7 @@ public final class AppModel: ObservableObject {
     private let engine: TimerEngine
     private let prefs: Preferences
     private let clock: Clock
+    private let calendar: Calendar
     private var ticker: Timer?
     private var runStartedAt: Date?
     private var cancellables = Set<AnyCancellable>()
@@ -58,11 +80,16 @@ public final class AppModel: ObservableObject {
         store: Store,
         prefs: Preferences = Preferences(),
         clock: Clock = SystemClock(),
+        calendar: Calendar = .current,
+        scheduler: FollowUpScheduling? = nil,
         autoTick: Bool = true
     ) {
         self.store = store
         self.prefs = prefs
         self.clock = clock
+        self.calendar = calendar
+        self.scheduler = scheduler
+        self.followUpDestination = prefs.followUpDestination
         self.engine = TimerEngine(clock: clock)
         self.soundEnabled = prefs.soundEnabled
         self.takeoverEnabled = prefs.takeoverEnabled
@@ -99,8 +126,18 @@ public final class AppModel: ObservableObject {
 
     public func complete(_ task: TaskItem) {
         let banked = task.id == activeTaskID ? finishActiveRun(completedTask: true) : 0
+        let spent = task.secondsSpent + banked
         store.complete(task, at: clock.now, addingSeconds: banked)
         let title = task.title
+        pendingFollowUp = PendingFollowUp(
+            taskID: task.id,
+            taskTitle: title,
+            note: task.note,
+            secondsFocused: spent,
+            completedAt: clock.now
+        )
+        followUpError = nil
+        followUpPromptPinned = false
         refresh()
         onCelebrate?(title)
     }
@@ -165,6 +202,95 @@ public final class AppModel: ObservableObject {
 
     public func noteChanged(_ text: String, for task: TaskItem) {
         noteEdits.send((id: task.id, text: text))
+    }
+
+    // MARK: - Follow-ups
+
+    public func followUp(for task: TaskItem) -> FollowUpRecord? {
+        store.followUp(forTaskWith: task.id)
+    }
+
+    public func previewDate(for offset: FollowUpOffset) -> Date {
+        offset.resolve(from: clock.now, calendar: calendar)
+    }
+
+    public func pinFollowUpPrompt() {
+        followUpPromptPinned = true
+    }
+
+    public func dismissFollowUp() {
+        pendingFollowUp = nil
+        followUpError = nil
+        followUpPromptPinned = false
+        isSchedulingFollowUp = false
+    }
+
+    /// Creates the follow-up in the chosen app. Leaves the prompt open on
+    /// failure so the reason is visible rather than silently swallowed.
+    public func scheduleFollowUp(_ offset: FollowUpOffset) async {
+        guard let pending = pendingFollowUp, !isSchedulingFollowUp else { return }
+        guard let scheduler else {
+            followUpError = .underlying("Follow-ups are unavailable in this build.")
+            followUpPromptPinned = true
+            return
+        }
+        let destination = followUpDestination
+        let date = offset.resolve(from: clock.now, calendar: calendar)
+
+        isSchedulingFollowUp = true
+        followUpError = nil
+        defer { isSchedulingFollowUp = false }
+
+        guard await scheduler.requestAccess(to: destination) else {
+            followUpError = .accessDenied(destination)
+            followUpPromptPinned = true
+            return
+        }
+
+        do {
+            let externalID = try await scheduler.schedule(
+                FollowUpRequest(
+                    title: "Follow up: \(pending.taskTitle)",
+                    notes: notes(for: pending),
+                    date: date,
+                    destination: destination
+                )
+            )
+            store.record(
+                FollowUpRecord(
+                    taskID: pending.taskID,
+                    taskTitle: pending.taskTitle,
+                    scheduledFor: date,
+                    destination: destination,
+                    externalID: externalID,
+                    createdAt: clock.now
+                )
+            )
+            pendingFollowUp = nil
+            followUpPromptPinned = false
+            refresh()
+        } catch let error as FollowUpError {
+            followUpError = error
+            followUpPromptPinned = true
+        } catch {
+            followUpError = .underlying(error.localizedDescription)
+            followUpPromptPinned = true
+        }
+    }
+
+    private func notes(for pending: PendingFollowUp) -> String {
+        var lines: [String] = []
+        if !pending.note.isEmpty { lines.append(pending.note) }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        var summary = "Completed \(formatter.string(from: pending.completedAt))"
+        if pending.secondsFocused > 0 {
+            summary += " · \(pending.secondsFocused.compactDuration) focused"
+        }
+        lines.append(summary)
+        return lines.joined(separator: "\n\n")
     }
 
     // MARK: - Timer actions

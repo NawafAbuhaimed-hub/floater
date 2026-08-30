@@ -21,6 +21,9 @@ timers and a confetti burst when you finish something.
   blocking the running task stops its timer.
 - **Notes.** A note per task, opened inline by clicking its title, plus a global
   scratchpad on the Notes tab.
+- **Follow-ups.** Finishing a task offers a follow-up in **Calendar** or
+  **Reminders** — Tomorrow / 3 days / Next week at 9am, or a date you pick. It
+  appears beside the pill and fades after 8 seconds if you ignore it.
 - **Resizable.** Drag the grip in the bottom-right corner. The pill and the
   expanded panel remember their own sizes.
 - **Remembers everything.** Tasks, focus time per task, and session history are
@@ -32,7 +35,7 @@ timers and a confetti burst when you finish something.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 61 tests
+swift test        # 80 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -52,13 +55,24 @@ you hide the pill, toggle sound and the full-screen alert, and quit.
 | Add a note | Click the task title |
 | Global scratchpad | **Notes** tab in the header |
 | Resize | Drag the grip in the bottom-right corner |
+| Schedule a follow-up | Finish a task, then pick a time in the prompt |
+
+## Calendar and Reminders access
+
+The first follow-up you schedule triggers a macOS permission prompt. Calendar
+access is requested **write-only** — Floater creates events and never reads your
+calendar.
+
+Because Floater is ad-hoc signed, its code signature changes on every rebuild,
+and macOS ties permission to that signature. Expect to be asked again after a
+rebuild. It stays granted once you stop rebuilding.
 
 ## Layout
 
 ```
 Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
-Tests/FloaterCoreTests  61 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  80 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

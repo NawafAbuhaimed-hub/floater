@@ -26,6 +26,7 @@ public final class Preferences {
         static let soundEnabled = "floater.soundEnabled"
         static let takeoverEnabled = "floater.takeoverEnabled"
         static let panelOrigin = "floater.panelOrigin"
+        static let followUpDestination = "floater.followUpDestination"
         static let collapsedSize = "floater.collapsedSize"
         static let expandedSize = "floater.expandedSize"
         static let activeRun = "floater.activeRun"
@@ -45,6 +46,16 @@ public final class Preferences {
     public var takeoverEnabled: Bool {
         get { store.object(forKey: Key.takeoverEnabled) as? Bool ?? true }
         set { store.set(newValue, forKey: Key.takeoverEnabled) }
+    }
+
+    /// The destination used for the last follow-up, so the common case is one click.
+    public var followUpDestination: FollowUpDestination {
+        get {
+            guard let raw = store.object(forKey: Key.followUpDestination) as? String,
+                  let value = FollowUpDestination(rawValue: raw) else { return .calendar }
+            return value
+        }
+        set { store.set(newValue.rawValue, forKey: Key.followUpDestination) }
     }
 
     public var panelOrigin: CGPoint? {

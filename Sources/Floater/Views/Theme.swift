@@ -58,18 +58,6 @@ struct ProgressRing: View {
     }
 }
 
-extension TimeInterval {
-    /// "1h 12m", "45m", "30s" — for time banked against a task.
-    var compactDuration: String {
-        let total = Int(self.rounded())
-        if total >= 3600 {
-            let h = total / 3600, m = (total % 3600) / 60
-            return m == 0 ? "\(h)h" : "\(h)h \(m)m"
-        }
-        if total >= 60 { return "\(total / 60)m" }
-        return "\(total)s"
-    }
-}
 
 
 /// The diagonal grip in the bottom-right corner. Dragging it resizes the panel.

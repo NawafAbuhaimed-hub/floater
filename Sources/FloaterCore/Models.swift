@@ -90,3 +90,39 @@ public final class Scratchpad {
         self.updatedAt = updatedAt
     }
 }
+
+
+/// A follow-up Floater created in Calendar or Reminders, kept so a finished
+/// task can show that it has one.
+@Model
+public final class FollowUpRecord {
+    public var id: UUID = UUID()
+    public var taskID: UUID = UUID()
+    public var taskTitle: String = ""
+    public var scheduledFor: Date = Date()
+    public var destinationRaw: String = FollowUpDestination.calendar.rawValue
+    public var externalID: String = ""
+    public var createdAt: Date = Date()
+
+    public init(
+        id: UUID = UUID(),
+        taskID: UUID,
+        taskTitle: String,
+        scheduledFor: Date,
+        destination: FollowUpDestination,
+        externalID: String,
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.taskID = taskID
+        self.taskTitle = taskTitle
+        self.scheduledFor = scheduledFor
+        self.destinationRaw = destination.rawValue
+        self.externalID = externalID
+        self.createdAt = createdAt
+    }
+
+    public var destination: FollowUpDestination {
+        FollowUpDestination(rawValue: destinationRaw) ?? .calendar
+    }
+}

@@ -106,7 +106,36 @@ mask, both found by driving the real window rather than by reading code:
 Sizes are remembered per mode and saved only on `didEndLiveResize`, so the
 app's own animated expand/collapse never overwrites what the user chose.
 
+## Addendum — follow-ups
+
+Finishing a task offers a follow-up in Calendar or Reminders. Presets are
+Tomorrow / 3 days / Next week at 9am, plus a picker.
+
+**Resolved against a calendar, not by adding seconds.** `FollowUpOffset` uses
+`startOfDay` + `date(byAdding: .day)` + `bySettingHour`, so a preset lands at
+9am local even across a DST change, a month end, or a leap day. Adding 86,400
+seconds would land at 10:00 on the day the clocks go forward. Tested at all four
+boundaries.
+
+**Scheduling is behind `FollowUpScheduling`.** The app model is tested against a
+fake, so the suite never touches a real calendar, never needs permissions, and
+covers the paths that matter most: a denied permission, a missing default
+calendar, and a retry after a failure. Failures keep the prompt open with the
+reason on it rather than being swallowed.
+
+**The prompt is its own small panel**, not part of the confetti overlay. The
+confetti window is click-through by design; making it interactive would have
+swallowed every click on screen while it showed. The prompt also deliberately
+does *not* take key focus when it appears — it arrives unannounced and stealing
+the caret mid-typing would be hostile. It takes focus only once the user opens
+the date picker, which needs it.
+
+**Access is write-only for Calendar** (`requestWriteOnlyAccessToEvents`), since
+Floater only ever creates events.
+
 ## Deliberately not built
 
-iCloud sync, subtasks, tags, projects, recurring tasks, calendar integration, a
-stats dashboard, Pomodoro break cycles, global hotkeys.
+iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,
+Pomodoro break cycles, global hotkeys. Follow-ups are one-way: Floater writes to
+Calendar and Reminders and never reads them back, so an event you delete there
+still shows on the task here.
