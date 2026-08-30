@@ -8,11 +8,12 @@ public final class Store {
     public let container: ModelContainer
     public private(set) var tasks: [TaskItem] = []
     public private(set) var followUps: [FollowUpRecord] = []
+    public private(set) var chatMessages: [ChatMessageRecord] = []
 
     public var context: ModelContext { container.mainContext }
 
     public init(inMemory: Bool = false) throws {
-        let schema = Schema([TaskItem.self, FocusSessionRecord.self, Scratchpad.self, FollowUpRecord.self])
+        let schema = Schema([TaskItem.self, FocusSessionRecord.self, Scratchpad.self, FollowUpRecord.self, ChatMessageRecord.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         container = try ModelContainer(for: schema, configurations: [config])
         reload()
@@ -44,6 +45,28 @@ public final class Store {
         )
         tasks = (try? context.fetch(descriptor)) ?? []
         reloadFollowUps()
+        reloadChat()
+    }
+
+    // MARK: - Chat
+
+    public func appendChat(role: String, text: String, at date: Date = Date()) {
+        context.insert(ChatMessageRecord(role: role, text: text, createdAt: date))
+        try? context.save()
+        reloadChat()
+    }
+
+    public func clearChat() {
+        for message in chatMessages { context.delete(message) }
+        try? context.save()
+        reloadChat()
+    }
+
+    private func reloadChat() {
+        let descriptor = FetchDescriptor<ChatMessageRecord>(
+            sortBy: [SortDescriptor(\.createdAt)]
+        )
+        chatMessages = (try? context.fetch(descriptor)) ?? []
     }
 
     // MARK: - Queries

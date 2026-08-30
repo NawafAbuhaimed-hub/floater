@@ -126,3 +126,24 @@ public final class FollowUpRecord {
         FollowUpDestination(rawValue: destinationRaw) ?? .calendar
     }
 }
+
+
+/// The visible chat transcript. Tool calls are not stored — the conversation is
+/// replayed to the API as plain text, so a restored session never carries a
+/// `tool_use` block without its result.
+@Model
+public final class ChatMessageRecord {
+    public var id: UUID = UUID()
+    public var roleRaw: String = "user"
+    public var text: String = ""
+    public var createdAt: Date = Date()
+
+    public init(id: UUID = UUID(), role: String, text: String, createdAt: Date = Date()) {
+        self.id = id
+        self.roleRaw = role
+        self.text = text
+        self.createdAt = createdAt
+    }
+
+    public var isUser: Bool { roleRaw == "user" }
+}

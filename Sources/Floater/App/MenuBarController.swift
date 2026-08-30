@@ -41,6 +41,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             #selector(toggleVisibility)
         ))
         menu.addItem(item("Open Task List", #selector(openList)))
+        menu.addItem(item("Open Chat", #selector(openChat)))
         menu.addItem(.separator())
 
         let sound = item("Sound", #selector(toggleSound))
@@ -76,6 +77,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func openList() {
         if !panel.isVisible { panel.show() }
+        model.mode = .expanded
+    }
+
+    @objc private func openChat() {
+        if !panel.isVisible { panel.show() }
+        model.tab = .chat
         model.mode = .expanded
     }
 

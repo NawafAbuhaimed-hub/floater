@@ -133,9 +133,45 @@ the date picker, which needs it.
 **Access is write-only for Calendar** (`requestWriteOnlyAccessToEvents`), since
 Floater only ever creates events.
 
+## Addendum — chat
+
+A Chat tab where plain language becomes changes to the task list. Swift has no
+official Anthropic SDK, so this is raw HTTP against `POST /v1/messages`
+(`claude-haiku-4-5`, strict tool use).
+
+**Every tool is a proposal, which collapses the design.** Because nothing is
+applied until the user confirms, the model never needs a real tool result — so
+there is no agentic loop at all. One API call per turn: the response's
+`tool_use` blocks become the change set, and the conversation history is kept as
+plain text. That last part matters: replaying an assistant turn containing a
+`tool_use` block without its matching `tool_result` is a 400, and it is the
+failure a persisted transcript would walk straight into.
+
+**Handles, not UUIDs.** The system prompt carries a snapshot of the task list
+with short handles (`t1`, `t2`). The model addresses existing tasks by handle
+and tasks it is creating this turn by its own ref (`new-1`), which are resolved
+to real ids at apply time. A handle that maps to nothing is dropped rather than
+guessed at.
+
+**Testing.** `ClaudeClient` is a protocol, so the suite runs against canned
+responses — no network, no key, no spend. Covered: the wire shape, decoding an
+unknown block type, error mapping, every tool mapping, refs resolving across a
+change set, out-of-range input being rejected, a refusal, and that a proposal
+leaves the task list untouched until Apply.
+
+The live paths were verified end to end against the real API through the real
+engine: multi-tool turns, a question that correctly calls no tools, Arabic input,
+and a destructive delete.
+
+**The key is read lazily.** An early version read the Keychain in
+`AppModel.init`, and the app launched to no window at all — `SecItemCopyMatching`
+was blocking on a system access prompt before any window was created. The
+Keychain is now untouched until the Chat tab is opened.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,
-Pomodoro break cycles, global hotkeys. Follow-ups are one-way: Floater writes to
+Pomodoro break cycles, global hotkeys. Chat does not stream, and the model is
+not told about follow-ups that already exist. Follow-ups are one-way: Floater writes to
 Calendar and Reminders and never reads them back, so an event you delete there
 still shows on the task here.

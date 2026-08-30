@@ -11,14 +11,17 @@ struct ExpandedView: View {
         VStack(spacing: 0) {
             header
             Divider().opacity(0.5)
-            if model.tab == .tasks {
+            switch model.tab {
+            case .tasks:
                 composer
                 if model.isActive { activeCard }
                 Divider().opacity(0.5)
                 taskList
                 footer
-            } else {
+            case .notes:
                 notesPane
+            case .chat:
+                ChatView()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -25,7 +25,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let prefs = Preferences()
-        model = AppModel(store: store, prefs: prefs)
+        let keyStore = KeychainAPIKeyStore()
+        model = AppModel(
+            store: store,
+            prefs: prefs,
+            keyStore: keyStore,
+            makeChatEngine: { readKey in
+                ChatEngine(client: AnthropicClient(apiKey: readKey))
+            }
+        )
         panelController = FloatingPanelController(model: model, prefs: prefs)
         menuBar = MenuBarController(model: model, panel: panelController)
 

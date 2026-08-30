@@ -24,6 +24,9 @@ timers and a confetti burst when you finish something.
 - **Follow-ups.** Finishing a task offers a follow-up in **Calendar** or
   **Reminders** — Tomorrow / 3 days / Next week at 9am, or a date you pick. It
   appears beside the pill and fades after 8 seconds if you ignore it.
+- **Chat.** Describe your work in plain language (English or Arabic) and Claude
+  proposes changes — new tasks, statuses, timers, notes, follow-ups. Nothing is
+  applied until you press **Apply**.
 - **Resizable.** Drag the grip in the bottom-right corner. The pill and the
   expanded panel remember their own sizes.
 - **Remembers everything.** Tasks, focus time per task, and session history are
@@ -35,7 +38,7 @@ timers and a confetti burst when you finish something.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 80 tests
+swift test        # 104 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -56,6 +59,7 @@ you hide the pill, toggle sound and the full-screen alert, and quit.
 | Global scratchpad | **Notes** tab in the header |
 | Resize | Drag the grip in the bottom-right corner |
 | Schedule a follow-up | Finish a task, then pick a time in the prompt |
+| Talk to it | **Chat** tab — "the lease is blocked on legal, start 45 min on the deck" |
 
 ## Calendar and Reminders access
 
@@ -67,12 +71,34 @@ Because Floater is ad-hoc signed, its code signature changes on every rebuild,
 and macOS ties permission to that signature. Expect to be asked again after a
 rebuild. It stays granted once you stop rebuilding.
 
+## Chat
+
+The Chat tab needs your own Anthropic API key. Paste it once; it is stored in
+the macOS Keychain, never in a file or in UserDefaults, and is sent only to
+`api.anthropic.com`. The model is `claude-haiku-4-5` — task extraction is an
+easy job and it costs a fraction of a cent per message.
+
+Every tool Claude can call is a **proposal**. It can create tasks, change
+statuses, start timers, write notes, delete tasks, and schedule follow-ups, but
+the change set is shown to you with Apply / Discard and nothing touches your
+list until you approve it. The Keychain is not read until you open the tab.
+
+Two things worth knowing:
+
+- The transcript is stored locally and replayed to the API as plain text (tool
+  calls are not persisted), and only the last 20 turns are sent.
+- Because Floater is ad-hoc signed, its signature changes on every rebuild. The
+  Keychain item is stored with an open ACL so macOS does not prompt for access
+  after each build. On a shared machine you would want a real signing identity
+  and a restricted ACL instead.
+
 ## Layout
 
 ```
-Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences
+Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
+                      Claude client and the chat proposal engine
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
-Tests/FloaterCoreTests  80 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  104 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

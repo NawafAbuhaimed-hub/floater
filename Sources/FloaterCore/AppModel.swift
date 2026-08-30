@@ -17,9 +17,15 @@ public final class AppModel: ObservableObject {
     }
 
     public enum Tab: String, CaseIterable, Identifiable {
-        case tasks, notes
+        case tasks, notes, chat
         public var id: String { rawValue }
-        public var title: String { self == .tasks ? "Tasks" : "Notes" }
+        public var title: String {
+            switch self {
+            case .tasks: return "Tasks"
+            case .notes: return "Notes"
+            case .chat: return "Chat"
+            }
+        }
     }
 
     // Published state
@@ -41,6 +47,14 @@ public final class AppModel: ObservableObject {
     @Published public var followUpDestination: FollowUpDestination {
         didSet { prefs.followUpDestination = followUpDestination }
     }
+
+    // Chat
+    @Published public private(set) var chatMessages: [ChatMessageRecord] = []
+    @Published public private(set) var pendingActions: [ProposedAction] = []
+    @Published public private(set) var chatError: String?
+    @Published public private(set) var isSendingChat = false
+    @Published public private(set) var hasAPIKey = false
+    @Published public var chatDraft: String = ""
     @Published public var mode: Mode = .collapsed
     @Published public var tab: Tab = .tasks
     /// The task whose note is open inline, if any.
@@ -68,6 +82,8 @@ public final class AppModel: ObservableObject {
 
     private let store: Store
     private let engine: TimerEngine
+    private let keyStore: APIKeyStore
+    private var chat: ChatEngine?
     private let prefs: Preferences
     private let clock: Clock
     private let calendar: Calendar
@@ -82,6 +98,8 @@ public final class AppModel: ObservableObject {
         clock: Clock = SystemClock(),
         calendar: Calendar = .current,
         scheduler: FollowUpScheduling? = nil,
+        keyStore: APIKeyStore = InMemoryAPIKeyStore(),
+        makeChatEngine: ((@escaping @Sendable () -> String?) -> ChatEngine)? = nil,
         autoTick: Bool = true
     ) {
         self.store = store
@@ -89,7 +107,9 @@ public final class AppModel: ObservableObject {
         self.clock = clock
         self.calendar = calendar
         self.scheduler = scheduler
+        self.keyStore = keyStore
         self.followUpDestination = prefs.followUpDestination
+        self.makeChatEngine = makeChatEngine
         self.engine = TimerEngine(clock: clock)
         self.soundEnabled = prefs.soundEnabled
         self.takeoverEnabled = prefs.takeoverEnabled
@@ -97,6 +117,7 @@ public final class AppModel: ObservableObject {
             self?.handleElapsed(run)
         }
         self.scratchpad = store.scratchpadText
+
         restoreActiveRun()
         refresh()
         startDebouncedWrites()
@@ -202,6 +223,162 @@ public final class AppModel: ObservableObject {
 
     public func noteChanged(_ text: String, for task: TaskItem) {
         noteEdits.send((id: task.id, text: text))
+    }
+
+    // MARK: - Chat
+
+    private var makeChatEngine: ((@escaping @Sendable () -> String?) -> ChatEngine)?
+    private var hasPreparedChat = false
+
+    /// The Keychain is not touched until the user actually opens Chat. Reading
+    /// it can block on a system access prompt, which at launch would hang the
+    /// app before a window ever appears.
+    public func prepareChat() {
+        guard !hasPreparedChat else { return }
+        hasPreparedChat = true
+        hasAPIKey = !(keyStore.read() ?? "").isEmpty
+        rebuildChatEngine()
+    }
+
+    private func rebuildChatEngine() {
+        guard hasAPIKey, let makeChatEngine else { chat = nil; return }
+        let keyStore = self.keyStore
+        let engine = makeChatEngine({ keyStore.read() })
+        engine.restore(transcript: store.chatMessages.map { ($0.roleRaw, $0.text) })
+        chat = engine
+    }
+
+    public func saveAPIKey(_ key: String) {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, keyStore.write(trimmed) else { return }
+        hasPreparedChat = true
+        hasAPIKey = true
+        chatError = nil
+        rebuildChatEngine()
+    }
+
+    public func clearAPIKey() {
+        keyStore.clear()
+        hasAPIKey = false
+        chat = nil
+    }
+
+    public func clearChat() {
+        store.clearChat()
+        pendingActions = []
+        chatError = nil
+        chat?.reset()
+        refresh()
+    }
+
+    public func sendChat() async {
+        let text = chatDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isSendingChat else { return }
+        prepareChat()
+        guard let chat else {
+            chatError = ClaudeError.missingAPIKey.message
+            return
+        }
+        chatDraft = ""
+        chatError = nil
+        pendingActions = []
+        store.appendChat(role: "user", text: text, at: clock.now)
+        refresh()
+
+        isSendingChat = true
+        defer { isSendingChat = false }
+        do {
+            let turn = try await chat.send(text, tasks: tasks)
+            store.appendChat(role: "assistant", text: turn.reply, at: clock.now)
+            pendingActions = turn.actions
+            refresh()
+        } catch let error as ClaudeError {
+            chatError = error.message
+        } catch {
+            chatError = error.localizedDescription
+        }
+    }
+
+    public func discardProposals() {
+        guard !pendingActions.isEmpty else { return }
+        pendingActions = []
+        chat?.noteDiscarded()
+    }
+
+    /// Runs the proposed changes in order. Tasks created earlier in the set are
+    /// resolvable by the later actions that referred to them.
+    public func applyProposals() async {
+        guard !pendingActions.isEmpty else { return }
+        let actions = pendingActions
+        pendingActions = []
+        var created: [String: UUID] = [:]
+
+        func resolve(_ ref: TaskRef) -> TaskItem? {
+            switch ref {
+            case .existing(let id): return store.task(id: id)
+            case .pending(let key): return created[key].flatMap { store.task(id: $0) }
+            }
+        }
+
+        for proposal in actions {
+            switch proposal.action {
+            case .createTask(let ref, let title, let note, let status):
+                guard let task = store.add(title: title) else { continue }
+                created[ref] = task.id
+                if !note.isEmpty { store.updateNote(note, forTaskWith: task.id) }
+                if status != .notStarted { store.setStatus(status, for: task, at: clock.now) }
+            case .setStatus(let ref, let status):
+                guard let task = resolve(ref) else { continue }
+                setStatus(status, for: task)
+            case .startTimer(let ref, let minutes):
+                guard let task = resolve(ref) else { continue }
+                start(task, minutes: minutes)
+            case .addNote(let ref, let note):
+                guard let task = resolve(ref) else { continue }
+                store.updateNote(note, forTaskWith: task.id)
+            case .deleteTask(let ref):
+                guard let task = resolve(ref) else { continue }
+                delete(task)
+            case .scheduleFollowUp(let ref, let date, let destination):
+                guard let task = resolve(ref) else { continue }
+                await scheduleFollowUp(for: task, at: date, destination: destination)
+            }
+            refresh()
+        }
+        chat?.noteApplied(actions.count)
+        refresh()
+    }
+
+    /// Follow-up creation used by the chat, independent of the completion prompt.
+    private func scheduleFollowUp(for task: TaskItem, at date: Date, destination: FollowUpDestination) async {
+        guard let scheduler else {
+            chatError = "Follow-ups are unavailable in this build."
+            return
+        }
+        guard await scheduler.requestAccess(to: destination) else {
+            chatError = FollowUpError.accessDenied(destination).message
+            return
+        }
+        do {
+            let externalID = try await scheduler.schedule(
+                FollowUpRequest(
+                    title: "Follow up: \(task.title)",
+                    notes: task.note,
+                    date: date,
+                    destination: destination
+                )
+            )
+            store.record(
+                FollowUpRecord(
+                    taskID: task.id, taskTitle: task.title, scheduledFor: date,
+                    destination: destination, externalID: externalID, createdAt: clock.now
+                )
+            )
+        } catch let error as FollowUpError {
+            chatError = error.message
+        } catch {
+            chatError = error.localizedDescription
+        }
     }
 
     // MARK: - Follow-ups
@@ -412,6 +589,7 @@ public final class AppModel: ObservableObject {
         store.reload()
         tasks = store.tasks
         completedToday = store.completedOn(clock.now).count
+        chatMessages = store.chatMessages
         phase = engine.phase
         remaining = engine.remaining
         progress = engine.progress

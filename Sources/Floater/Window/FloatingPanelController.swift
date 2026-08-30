@@ -8,7 +8,7 @@ import Combine
 @MainActor
 final class FloatingPanelController {
     static let defaultCollapsed = CGSize(width: 300, height: 56)
-    static let defaultExpanded = CGSize(width: 360, height: 520)
+    static let defaultExpanded = CGSize(width: 380, height: 560)
 
     /// The pill keeps a fixed height; only the expanded panel resizes freely.
     static let collapsedBounds = (min: CGSize(width: 240, height: 56),
