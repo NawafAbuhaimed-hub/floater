@@ -384,10 +384,18 @@ public final class AppModel: ObservableObject {
 
     // MARK: - Follow-ups
 
-    /// Calendars / lists the user can send follow-ups to, for the menu bar picker.
+    /// Calendars / lists the user can send follow-ups to, asking for access if
+    /// it has not been granted yet. Only for an explicit user action.
     public func availableTargets(for destination: FollowUpDestination) async -> [FollowUpTarget] {
         guard let scheduler else { return [] }
         guard await scheduler.requestAccess(to: destination) else { return [] }
+        return await scheduler.availableTargets(for: destination)
+    }
+
+    /// The same list, but never prompts — returns nothing when access is absent.
+    /// Safe to call at launch and on every menu open.
+    public func knownTargets(for destination: FollowUpDestination) async -> [FollowUpTarget] {
+        guard let scheduler else { return [] }
         return await scheduler.availableTargets(for: destination)
     }
 

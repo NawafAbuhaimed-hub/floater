@@ -27,9 +27,22 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
+        refreshTargets()
+    }
+
+    /// Repopulates the calendar / list cache without ever prompting, so a
+    /// Google account connected in System Settings shows up on its own.
+    private func refreshTargets() {
+        Task { @MainActor in
+            for destination in FollowUpDestination.allCases {
+                let found = await model.knownTargets(for: destination)
+                if !found.isEmpty { targetCache[destination] = found }
+            }
+        }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        refreshTargets()
         menu.removeAllItems()
 
         let status = NSMenuItem(title: statusLine, action: nil, keyEquivalent: "")
@@ -115,7 +128,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         let cached = targetCache[destination] ?? []
         if cached.isEmpty {
             let placeholder = NSMenuItem(
-                title: "Load \(destination.title)...", action: #selector(loadTargets(_:)), keyEquivalent: ""
+                title: "Grant access\u{2026}", action: #selector(loadTargets(_:)), keyEquivalent: ""
             )
             placeholder.target = self
             placeholder.representedObject = destination.rawValue
