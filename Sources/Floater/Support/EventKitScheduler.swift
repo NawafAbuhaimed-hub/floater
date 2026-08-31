@@ -4,17 +4,20 @@ import Foundation
 
 /// Writes follow-ups into Calendar or Reminders.
 ///
-/// Calendar access is requested write-only — Floater only ever creates events
-/// and never reads your calendar, so that is the least it can ask for.
+/// Calendar access is requested in full rather than write-only: listing the
+/// user's calendars — so they can send follow-ups to a specific one, e.g. a
+/// Google calendar rather than whatever macOS picked as the default — requires
+/// read access.
 final class EventKitScheduler: FollowUpScheduling {
     private let store = EKEventStore()
 
     func requestAccess(to destination: FollowUpDestination) async -> Bool {
+        if authorized(destination) { return true }
         do {
             switch destination {
             case .calendar:
                 if #available(macOS 14.0, *) {
-                    return try await store.requestWriteOnlyAccessToEvents()
+                    return try await store.requestFullAccessToEvents()
                 }
                 return try await store.requestAccess(to: .event)
             case .reminders:
@@ -28,6 +31,34 @@ final class EventKitScheduler: FollowUpScheduling {
         }
     }
 
+    private func authorized(_ destination: FollowUpDestination) -> Bool {
+        let status = EKEventStore.authorizationStatus(for: destination == .calendar ? .event : .reminder)
+        if #available(macOS 14.0, *) { return status == .fullAccess }
+        return status == .authorized
+    }
+
+    func availableTargets(for destination: FollowUpDestination) async -> [FollowUpTarget] {
+        // Deliberately not gated on `authorizationStatus`: immediately after the
+        // user grants access, the cached status can still read notDetermined in
+        // this process, which silently produced an empty calendar list. Asking
+        // the store directly returns nothing when access is genuinely missing.
+        let entity: EKEntityType = destination == .calendar ? .event : .reminder
+        let fallback = destination == .calendar
+            ? store.defaultCalendarForNewEvents
+            : store.defaultCalendarForNewReminders()
+        return store.calendars(for: entity)
+            .filter(\.allowsContentModifications)
+            .map {
+                FollowUpTarget(
+                    id: $0.calendarIdentifier,
+                    title: $0.title,
+                    sourceName: $0.source?.title ?? "",
+                    isSystemDefault: $0.calendarIdentifier == fallback?.calendarIdentifier
+                )
+            }
+            .sorted { ($0.sourceName, $0.title) < ($1.sourceName, $1.title) }
+    }
+
     func schedule(_ request: FollowUpRequest) async throws -> String {
         switch request.destination {
         case .calendar:
@@ -37,8 +68,21 @@ final class EventKitScheduler: FollowUpScheduling {
         }
     }
 
+    /// The chosen calendar, falling back to the system default when none is set
+    /// or the chosen one has since disappeared.
+    private func target(_ request: FollowUpRequest) -> EKCalendar? {
+        if let id = request.targetID,
+           let match = store.calendar(withIdentifier: id),
+           match.allowsContentModifications {
+            return match
+        }
+        return request.destination == .calendar
+            ? store.defaultCalendarForNewEvents
+            : store.defaultCalendarForNewReminders()
+    }
+
     private func scheduleEvent(_ request: FollowUpRequest) throws -> String {
-        guard let calendar = store.defaultCalendarForNewEvents else {
+        guard let calendar = target(request) else {
             throw FollowUpError.noDefaultList(.calendar)
         }
         let event = EKEvent(eventStore: store)
@@ -57,7 +101,7 @@ final class EventKitScheduler: FollowUpScheduling {
     }
 
     private func scheduleReminder(_ request: FollowUpRequest) throws -> String {
-        guard let list = store.defaultCalendarForNewReminders() else {
+        guard let list = target(request) else {
             throw FollowUpError.noDefaultList(.reminders)
         }
         let reminder = EKReminder(eventStore: store)

@@ -20,6 +20,8 @@
     <string>14.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Floater adds follow-up events to a calendar you choose, and lists your calendars so you can pick one.</string>
     <key>NSCalendarsWriteOnlyAccessUsageDescription</key>
     <string>Floater adds follow-up events to your calendar when you finish a task.</string>
     <key>NSCalendarsUsageDescription</key>

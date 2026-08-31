@@ -365,7 +365,8 @@ public final class AppModel: ObservableObject {
                     title: "Follow up: \(task.title)",
                     notes: task.note,
                     date: date,
-                    destination: destination
+                    destination: destination,
+                    targetID: prefs.followUpTargetID(for: destination)
                 )
             )
             store.record(
@@ -382,6 +383,21 @@ public final class AppModel: ObservableObject {
     }
 
     // MARK: - Follow-ups
+
+    /// Calendars / lists the user can send follow-ups to, for the menu bar picker.
+    public func availableTargets(for destination: FollowUpDestination) async -> [FollowUpTarget] {
+        guard let scheduler else { return [] }
+        guard await scheduler.requestAccess(to: destination) else { return [] }
+        return await scheduler.availableTargets(for: destination)
+    }
+
+    public func selectedTargetID(for destination: FollowUpDestination) -> String? {
+        prefs.followUpTargetID(for: destination)
+    }
+
+    public func selectTarget(_ id: String?, for destination: FollowUpDestination) {
+        prefs.setFollowUpTargetID(id, for: destination)
+    }
 
     public func followUp(for task: TaskItem) -> FollowUpRecord? {
         store.followUp(forTaskWith: task.id)
@@ -430,7 +446,8 @@ public final class AppModel: ObservableObject {
                     title: "Follow up: \(pending.taskTitle)",
                     notes: notes(for: pending),
                     date: date,
-                    destination: destination
+                    destination: destination,
+                    targetID: prefs.followUpTargetID(for: destination)
                 )
             )
             store.record(

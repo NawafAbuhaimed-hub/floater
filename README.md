@@ -63,9 +63,17 @@ you hide the pill, toggle sound and the full-screen alert, and quit.
 
 ## Calendar and Reminders access
 
-The first follow-up you schedule triggers a macOS permission prompt. Calendar
-access is requested **write-only** — Floater creates events and never reads your
-calendar.
+The first follow-up you schedule triggers a macOS permission prompt.
+
+**Floater writes to Apple's Calendar and Reminders, not to Google directly.** If
+a Google account is connected in System Settings → Internet Accounts with
+Calendars enabled, its calendars appear here like any other and events sync
+through to Google. Pick which calendar or list receives follow-ups from the menu
+bar: **Follow-up calendar** / **Follow-up list** → *Load*, then choose. Leaving it
+on *System default* uses whatever macOS is set to.
+
+Calendar access is requested in full rather than write-only, because listing
+your calendars for that picker needs read access.
 
 Because Floater is ad-hoc signed, its code signature changes on every rebuild,
 and macOS ties permission to that signature. Expect to be asked again after a

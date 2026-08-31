@@ -54,11 +54,31 @@ public enum FollowUpOffset: Equatable, Sendable {
     }
 }
 
+/// A calendar or reminders list a follow-up can be written to.
+public struct FollowUpTarget: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    /// The account it belongs to — "Google", "iCloud", "On My Mac".
+    public let sourceName: String
+    public let isSystemDefault: Bool
+
+    public init(id: String, title: String, sourceName: String, isSystemDefault: Bool) {
+        self.id = id
+        self.title = title
+        self.sourceName = sourceName
+        self.isSystemDefault = isSystemDefault
+    }
+
+    public var label: String { sourceName.isEmpty ? title : "\(title) — \(sourceName)" }
+}
+
 public struct FollowUpRequest: Equatable, Sendable {
     public var title: String
     public var notes: String
     public var date: Date
     public var destination: FollowUpDestination
+    /// Which calendar or list to write to. `nil` uses the system default.
+    public var targetID: String?
     /// Length of the calendar event. Ignored for reminders.
     public var duration: TimeInterval
 
@@ -67,12 +87,14 @@ public struct FollowUpRequest: Equatable, Sendable {
         notes: String,
         date: Date,
         destination: FollowUpDestination,
+        targetID: String? = nil,
         duration: TimeInterval = 15 * 60
     ) {
         self.title = title
         self.notes = notes
         self.date = date
         self.destination = destination
+        self.targetID = targetID
         self.duration = duration
     }
 }
@@ -106,6 +128,8 @@ public enum FollowUpError: Error, Equatable {
 /// tested without EventKit, permissions, or writing to a real calendar.
 public protocol FollowUpScheduling: AnyObject {
     func requestAccess(to destination: FollowUpDestination) async -> Bool
+    /// Calendars or lists that can be written to. Empty when access is not granted.
+    func availableTargets(for destination: FollowUpDestination) async -> [FollowUpTarget]
     /// Returns the created item's external identifier.
     func schedule(_ request: FollowUpRequest) async throws -> String
 }

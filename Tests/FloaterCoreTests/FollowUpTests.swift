@@ -15,6 +15,11 @@ final class FakeScheduler: FollowUpScheduling, @unchecked Sendable {
         return accessGranted
     }
 
+    var targets: [FollowUpTarget] = []
+    func availableTargets(for destination: FollowUpDestination) async -> [FollowUpTarget] {
+        accessGranted ? targets : []
+    }
+
     func schedule(_ request: FollowUpRequest) async throws -> String {
         if let errorToThrow { throw errorToThrow }
         scheduled.append(request)
@@ -251,5 +256,82 @@ final class FollowUpSchedulingTests: XCTestCase {
 
         let reopened = Store(container: store.container)
         XCTAssertEqual(reopened.followUp(forTaskWith: task.id)?.taskTitle, "Ship the deck")
+    }
+}
+
+@MainActor
+final class FollowUpTargetTests: XCTestCase {
+    private var store: Store!
+    private var prefs: Preferences!
+    private var model: AppModel!
+    private var scheduler: FakeScheduler!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        store = try Store(inMemory: true)
+        prefs = Preferences(store: InMemoryStore())
+        scheduler = FakeScheduler()
+        scheduler.targets = [
+            FollowUpTarget(id: "cal-work", title: "Work", sourceName: "iCloud", isSystemDefault: true),
+            FollowUpTarget(id: "cal-google", title: "Nawaf", sourceName: "Google", isSystemDefault: false),
+        ]
+        model = AppModel(store: store, prefs: prefs, clock: TestClock(),
+                         scheduler: scheduler, autoTick: false)
+    }
+
+    private func completeATask() {
+        model.draft = "Ship it"
+        model.addDraftTask()
+        model.complete(model.tasks[0])
+    }
+
+    func testNoTargetIsChosenByDefaultSoTheSystemDefaultIsUsed() async {
+        XCTAssertNil(model.selectedTargetID(for: .calendar))
+        completeATask()
+        await model.scheduleFollowUp(.tomorrow)
+        XCTAssertNil(scheduler.scheduled.first?.targetID, "nil means: let EventKit pick the default")
+    }
+
+    func testAChosenCalendarIsSentWithTheRequest() async {
+        model.selectTarget("cal-google", for: .calendar)
+        completeATask()
+        await model.scheduleFollowUp(.tomorrow)
+        XCTAssertEqual(scheduler.scheduled.first?.targetID, "cal-google")
+    }
+
+    func testTargetsAreRememberedSeparatelyPerDestination() {
+        model.selectTarget("cal-google", for: .calendar)
+        model.selectTarget("list-personal", for: .reminders)
+        XCTAssertEqual(model.selectedTargetID(for: .calendar), "cal-google")
+        XCTAssertEqual(model.selectedTargetID(for: .reminders), "list-personal")
+
+        let reloaded = Preferences(store: InMemoryStore())
+        XCTAssertNil(reloaded.followUpTargetID(for: .calendar), "a fresh store starts unset")
+        XCTAssertEqual(prefs.followUpTargetID(for: .calendar), "cal-google", "and the real one persists")
+    }
+
+    func testClearingTheChoiceFallsBackToTheSystemDefault() async {
+        model.selectTarget("cal-google", for: .calendar)
+        model.selectTarget(nil, for: .calendar)
+        completeATask()
+        await model.scheduleFollowUp(.tomorrow)
+        XCTAssertNil(scheduler.scheduled.first?.targetID)
+    }
+
+    func testTargetsAreListedOnlyWhenAccessIsGranted() async {
+        let granted = await model.availableTargets(for: .calendar)
+        XCTAssertEqual(granted.map(\.id), ["cal-work", "cal-google"])
+
+        scheduler.accessGranted = false
+        let denied = await model.availableTargets(for: .calendar)
+        XCTAssertTrue(denied.isEmpty, "no access means no calendars to choose from")
+    }
+
+    func testTargetLabelReadsAsCalendarThenAccount() {
+        XCTAssertEqual(scheduler.targets[1].label, "Nawaf — Google")
+        XCTAssertEqual(
+            FollowUpTarget(id: "x", title: "Work", sourceName: "", isSystemDefault: false).label,
+            "Work"
+        )
     }
 }

@@ -130,8 +130,23 @@ does *not* take key focus when it appears — it arrives unannounced and stealin
 the caret mid-typing would be hostile. It takes focus only once the user opens
 the date picker, which needs it.
 
-**Access is write-only for Calendar** (`requestWriteOnlyAccessToEvents`), since
-Floater only ever creates events.
+**Access was write-only for Calendar, and is now full.** Write-only is the least
+privilege that can create events, but it cannot list calendars — and without a
+list the user cannot choose *which* calendar receives follow-ups (a Google one,
+say, rather than whatever macOS defaults to). The picker won, so
+`requestFullAccessToEvents` it is. The chosen calendar is stored per destination
+and falls back to the system default when unset or when the calendar has since
+disappeared.
+
+Two things only a live run against a real calendar could have found:
+
+1. `defaultCalendarForNewEvents` under write-only access was an open question —
+   the write path had never been executed. It works.
+2. `availableTargets` gated itself on `EKEventStore.authorizationStatus`, which
+   still reads `notDetermined` in-process immediately after the user grants
+   access. The calendar list came back **empty right after being authorised**.
+   It now asks the store directly, which returns nothing when access is
+   genuinely missing and the real list when it is not.
 
 ## Addendum — chat
 
