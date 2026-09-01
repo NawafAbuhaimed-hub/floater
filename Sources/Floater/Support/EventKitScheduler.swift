@@ -15,16 +15,8 @@ final class EventKitScheduler: FollowUpScheduling {
         if authorized(destination) { return true }
         do {
             switch destination {
-            case .calendar:
-                if #available(macOS 14.0, *) {
-                    return try await store.requestFullAccessToEvents()
-                }
-                return try await store.requestAccess(to: .event)
-            case .reminders:
-                if #available(macOS 14.0, *) {
-                    return try await store.requestFullAccessToReminders()
-                }
-                return try await store.requestAccess(to: .reminder)
+            case .calendar: return try await store.requestFullAccessToEvents()
+            case .reminders: return try await store.requestFullAccessToReminders()
             }
         } catch {
             return false
@@ -32,9 +24,7 @@ final class EventKitScheduler: FollowUpScheduling {
     }
 
     private func authorized(_ destination: FollowUpDestination) -> Bool {
-        let status = EKEventStore.authorizationStatus(for: destination == .calendar ? .event : .reminder)
-        if #available(macOS 14.0, *) { return status == .fullAccess }
-        return status == .authorized
+        EKEventStore.authorizationStatus(for: destination == .calendar ? .event : .reminder) == .fullAccess
     }
 
     func availableTargets(for destination: FollowUpDestination) async -> [FollowUpTarget] {

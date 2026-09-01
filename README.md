@@ -65,10 +65,12 @@ you hide the pill, toggle sound and the full-screen alert, and quit.
 
 The first follow-up you schedule triggers a macOS permission prompt.
 
-**Floater writes to Apple's Calendar and Reminders, not to Google directly.** If
-a Google account is connected in System Settings → Internet Accounts with
-Calendars enabled, its calendars appear here like any other and events sync
-through to Google. Pick which calendar or list receives follow-ups from the menu
+**Floater writes to Apple's Calendar and Reminders, not to Google directly.**
+Connect a Google account in System Settings → Internet Accounts with Calendars
+enabled and its calendars appear here like any other — verified working, events
+written to a Google calendar sync straight through. Reminders has no Google
+equivalent (Google Tasks is not exposed through EventKit), so reminder lists
+stay iCloud-only. Pick which calendar or list receives follow-ups from the menu
 bar: **Follow-up calendar** / **Follow-up list** → *Load*, then choose. Leaving it
 on *System default* uses whatever macOS is set to.
 
