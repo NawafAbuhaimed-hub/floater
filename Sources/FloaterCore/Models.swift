@@ -15,6 +15,8 @@ public final class TaskItem {
     /// Persisted as a string so adding cases never breaks an existing store.
     public var statusRaw: String = TaskStatus.notStarted.rawValue
     public var note: String = ""
+    /// Calendar event logging this task's completion, so reopening can remove it.
+    public var completionEventID: String = ""
 
     public init(
         id: UUID = UUID(),

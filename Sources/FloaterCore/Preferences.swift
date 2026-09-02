@@ -27,6 +27,7 @@ public final class Preferences {
         static let takeoverEnabled = "floater.takeoverEnabled"
         static let panelOrigin = "floater.panelOrigin"
         static let followUpDestination = "floater.followUpDestination"
+        static let logCompletions = "floater.logCompletions"
         static let followUpTargetPrefix = "floater.followUpTarget."
         static let collapsedSize = "floater.collapsedSize"
         static let expandedSize = "floater.expandedSize"
@@ -69,6 +70,12 @@ public final class Preferences {
         let key = Key.followUpTargetPrefix + destination.rawValue
         guard let id else { return store.removeObject(forKey: key) }
         store.set(id, forKey: key)
+    }
+
+    /// Whether finishing a task writes an event to the calendar. On by default.
+    public var logCompletions: Bool {
+        get { store.object(forKey: Key.logCompletions) as? Bool ?? true }
+        set { store.set(newValue, forKey: Key.logCompletions) }
     }
 
     public var panelOrigin: CGPoint? {

@@ -66,6 +66,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         takeover.state = model.takeoverEnabled ? .on : .off
         menu.addItem(takeover)
 
+        let logging = item("Log finished tasks to calendar", #selector(toggleLogging))
+        logging.state = model.logCompletions ? .on : .off
+        menu.addItem(logging)
+
         menu.addItem(.separator())
         for destination in FollowUpDestination.allCases {
             menu.addItem(targetMenu(for: destination))
@@ -172,6 +176,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         }
     }
 
+    @objc private func toggleLogging() { model.logCompletions.toggle() }
     @objc private func toggleSound() { model.soundEnabled.toggle() }
     @objc private func toggleTakeover() { model.takeoverEnabled.toggle() }
     @objc private func quit() { NSApp.terminate(nil) }

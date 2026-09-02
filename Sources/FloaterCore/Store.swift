@@ -120,6 +120,12 @@ public final class Store {
         save()
     }
 
+    public func setCompletionEventID(_ eventID: String, forTaskWith id: UUID) {
+        guard let task = task(id: id) else { return }
+        task.completionEventID = eventID
+        save()
+    }
+
     public func updateNote(_ note: String, forTaskWith id: UUID) {
         guard let task = task(id: id), task.note != note else { return }
         task.note = note

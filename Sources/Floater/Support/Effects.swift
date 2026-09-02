@@ -2,11 +2,24 @@ import FloaterCore
 import AppKit
 import UserNotifications
 
-/// System sounds — no bundled assets to ship or keep in sync.
 enum Sounds {
-    static func celebrate() { NSSound(named: "Hero")?.play() }
+    /// Held so the sound is not deallocated mid-playback.
+    private static var player: NSSound?
+    private static let completionFile = Bundle.main.url(forResource: "complete", withExtension: "mp3")
+
+    /// The bundled completion sound, falling back to a system one if the file
+    /// is missing from the bundle.
+    static func celebrate() {
+        if let completionFile, let sound = NSSound(contentsOf: completionFile, byReference: true) {
+            player?.stop()
+            player = sound
+            sound.play()
+            return
+        }
+        NSSound(named: "Hero")?.play()
+    }
+
     static func timeUp() { NSSound(named: "Submarine")?.play() }
-    static func tap() { NSSound(named: "Pop")?.play() }
 }
 
 /// Local notifications. Every call is best-effort: an unsigned or unbundled

@@ -49,7 +49,7 @@ final class EventKitScheduler: FollowUpScheduling {
             .sorted { ($0.sourceName, $0.title) < ($1.sourceName, $1.title) }
     }
 
-    func schedule(_ request: FollowUpRequest) async throws -> String {
+    func schedule(_ request: ScheduleRequest) async throws -> String {
         switch request.destination {
         case .calendar:
             return try scheduleEvent(request)
@@ -60,7 +60,7 @@ final class EventKitScheduler: FollowUpScheduling {
 
     /// The chosen calendar, falling back to the system default when none is set
     /// or the chosen one has since disappeared.
-    private func target(_ request: FollowUpRequest) -> EKCalendar? {
+    private func target(_ request: ScheduleRequest) -> EKCalendar? {
         if let id = request.targetID,
            let match = store.calendar(withIdentifier: id),
            match.allowsContentModifications {
@@ -71,7 +71,7 @@ final class EventKitScheduler: FollowUpScheduling {
             : store.defaultCalendarForNewReminders()
     }
 
-    private func scheduleEvent(_ request: FollowUpRequest) throws -> String {
+    private func scheduleEvent(_ request: ScheduleRequest) throws -> String {
         guard let calendar = target(request) else {
             throw FollowUpError.noDefaultList(.calendar)
         }
@@ -90,7 +90,7 @@ final class EventKitScheduler: FollowUpScheduling {
         return event.eventIdentifier ?? ""
     }
 
-    private func scheduleReminder(_ request: FollowUpRequest) throws -> String {
+    private func scheduleReminder(_ request: ScheduleRequest) throws -> String {
         guard let list = target(request) else {
             throw FollowUpError.noDefaultList(.reminders)
         }
@@ -108,5 +108,22 @@ final class EventKitScheduler: FollowUpScheduling {
             throw FollowUpError.underlying(error.localizedDescription)
         }
         return reminder.calendarItemIdentifier
+    }
+
+    /// Removes a previously created event or reminder. An item that is already
+    /// gone is not an error — the calendar simply agrees with us.
+    func remove(id: String, destination: FollowUpDestination) async throws {
+        do {
+            switch destination {
+            case .calendar:
+                guard let event = store.event(withIdentifier: id) else { return }
+                try store.remove(event, span: .thisEvent, commit: true)
+            case .reminders:
+                guard let reminder = store.calendarItem(withIdentifier: id) as? EKReminder else { return }
+                try store.remove(reminder, commit: true)
+            }
+        } catch {
+            throw FollowUpError.underlying(error.localizedDescription)
+        }
     }
 }

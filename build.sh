@@ -15,6 +15,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Floater"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/Sounds/*.mp3 "$APP/Contents/Resources/" 2>/dev/null || true
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 echo "==> Signing (ad-hoc)"

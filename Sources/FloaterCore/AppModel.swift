@@ -47,6 +47,11 @@ public final class AppModel: ObservableObject {
     @Published public var followUpDestination: FollowUpDestination {
         didSet { prefs.followUpDestination = followUpDestination }
     }
+    /// Writes a calendar event for each finished task, at the time it was done.
+    @Published public var logCompletions: Bool {
+        didSet { prefs.logCompletions = logCompletions }
+    }
+    @Published public private(set) var completionLogError: String?
 
     // Chat
     @Published public private(set) var chatMessages: [ChatMessageRecord] = []
@@ -109,6 +114,7 @@ public final class AppModel: ObservableObject {
         self.scheduler = scheduler
         self.keyStore = keyStore
         self.followUpDestination = prefs.followUpDestination
+        self.logCompletions = prefs.logCompletions
         self.makeChatEngine = makeChatEngine
         self.engine = TimerEngine(clock: clock)
         self.soundEnabled = prefs.soundEnabled
@@ -159,17 +165,21 @@ public final class AppModel: ObservableObject {
         )
         followUpError = nil
         followUpPromptPinned = false
+        completionLogError = nil
         refresh()
         onCelebrate?(title)
+        logCompletion(taskID: task.id, title: title, focusedSeconds: spent, finishedAt: clock.now)
     }
 
     public func reopen(_ task: TaskItem) {
+        unlogCompletion(task)
         store.reopen(task)
         refresh()
     }
 
     public func delete(_ task: TaskItem) {
         if task.id == activeTaskID { _ = finishActiveRun(completedTask: false) }
+        unlogCompletion(task)
         store.delete(task)
         refresh()
     }
@@ -191,6 +201,8 @@ public final class AppModel: ObservableObject {
         if task.id == activeTaskID {
             _ = finishActiveRun(completedTask: false)
         }
+        // Leaving Done makes any logged completion a lie; take it back.
+        if task.isDone { unlogCompletion(task) }
         store.setStatus(status, for: task, at: clock.now)
         refresh()
     }
@@ -361,7 +373,7 @@ public final class AppModel: ObservableObject {
         }
         do {
             let externalID = try await scheduler.schedule(
-                FollowUpRequest(
+                ScheduleRequest(
                     title: "Follow up: \(task.title)",
                     notes: task.note,
                     date: date,
@@ -380,6 +392,53 @@ public final class AppModel: ObservableObject {
         } catch {
             chatError = error.localizedDescription
         }
+    }
+
+    // MARK: - Completion log
+
+    /// Default block for a task finished without ever running a timer.
+    public static let untimedCompletionSeconds: TimeInterval = 15 * 60
+
+    /// Records the finished task on the calendar, ending at the moment it was
+    /// completed and reaching back over the time actually focused on it.
+    private func logCompletion(taskID: UUID, title: String, focusedSeconds: Double, finishedAt: Date) {
+        guard logCompletions, let scheduler else { return }
+        let duration = focusedSeconds > 0 ? focusedSeconds : Self.untimedCompletionSeconds
+        let start = finishedAt.addingTimeInterval(-duration)
+        let note = store.task(id: taskID)?.note ?? ""
+        let request = ScheduleRequest(
+            title: "\(title) \u{2705}",
+            notes: [note.isEmpty ? nil : note, "Focused \(duration.compactDuration)"]
+                .compactMap { $0 }.joined(separator: "\n\n"),
+            date: start,
+            destination: .calendar,
+            targetID: prefs.followUpTargetID(for: .calendar),
+            duration: duration
+        )
+
+        Task { [weak self] in
+            guard let self else { return }
+            guard await scheduler.requestAccess(to: .calendar) else {
+                self.completionLogError = FollowUpError.accessDenied(.calendar).message
+                return
+            }
+            do {
+                let eventID = try await scheduler.schedule(request)
+                self.store.setCompletionEventID(eventID, forTaskWith: taskID)
+                self.refresh()
+            } catch let error as FollowUpError {
+                self.completionLogError = error.message
+            } catch {
+                self.completionLogError = error.localizedDescription
+            }
+        }
+    }
+
+    private func unlogCompletion(_ task: TaskItem) {
+        let eventID = task.completionEventID
+        guard !eventID.isEmpty, let scheduler else { return }
+        store.setCompletionEventID("", forTaskWith: task.id)
+        Task { try? await scheduler.remove(id: eventID, destination: .calendar) }
     }
 
     // MARK: - Follow-ups
@@ -450,7 +509,7 @@ public final class AppModel: ObservableObject {
 
         do {
             let externalID = try await scheduler.schedule(
-                FollowUpRequest(
+                ScheduleRequest(
                     title: "Follow up: \(pending.taskTitle)",
                     notes: notes(for: pending),
                     date: date,

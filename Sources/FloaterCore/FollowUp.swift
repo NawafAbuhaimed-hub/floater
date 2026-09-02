@@ -72,7 +72,9 @@ public struct FollowUpTarget: Identifiable, Equatable, Sendable {
     public var label: String { sourceName.isEmpty ? title : "\(title) — \(sourceName)" }
 }
 
-public struct FollowUpRequest: Equatable, Sendable {
+/// One write into Calendar or Reminders. Used both for forward-looking
+/// follow-ups and for logging a completed task at the time it was finished.
+public struct ScheduleRequest: Equatable, Sendable {
     public var title: String
     public var notes: String
     public var date: Date
@@ -131,5 +133,7 @@ public protocol FollowUpScheduling: AnyObject {
     /// Calendars or lists that can be written to. Empty when access is not granted.
     func availableTargets(for destination: FollowUpDestination) async -> [FollowUpTarget]
     /// Returns the created item's external identifier.
-    func schedule(_ request: FollowUpRequest) async throws -> String
+    func schedule(_ request: ScheduleRequest) async throws -> String
+    /// Removes something previously scheduled. Missing items are not an error.
+    func remove(id: String, destination: FollowUpDestination) async throws
 }

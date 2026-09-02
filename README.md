@@ -15,7 +15,11 @@ timers and a confetti burst when you finish something.
   notification, and a full-screen "did you finish?" card with Done / +10 min /
   Stop. The full-screen part can be turned off from the menu bar.
 - **Confetti on completion.** Ticking a task off bursts confetti across the
-  screen and plays a chime.
+  screen and plays a bundled chime.
+- **A done log on your calendar.** Finishing a task writes an event titled
+  `Task name ✅`, ending at the moment you finished and reaching back over the
+  time you actually focused — so the calendar shows real work blocks. Reopening
+  the task deletes the event again. Toggle it from the menu bar.
 - **Four statuses**, each colour-coded: Not started (gray), In progress (blue),
   Done (green), Blocked (red). Starting a timer marks a task In progress;
   blocking the running task stops its timer.
@@ -38,7 +42,7 @@ timers and a confetti burst when you finish something.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 104 tests
+swift test        # 125 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -59,6 +63,7 @@ you hide the pill, toggle sound and the full-screen alert, and quit.
 | Global scratchpad | **Notes** tab in the header |
 | Resize | Drag the grip in the bottom-right corner |
 | Schedule a follow-up | Finish a task, then pick a time in the prompt |
+| Turn the done log off | Menu bar → **Log finished tasks to calendar** |
 | Talk to it | **Chat** tab — "the lease is blocked on legal, start 45 min on the deck" |
 
 ## Calendar and Reminders access
@@ -108,7 +113,8 @@ Two things worth knowing:
 Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
                       Claude client and the chat proposal engine
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
-Tests/FloaterCoreTests  104 tests over the engine, store, statuses, notes, app model
+Resources/Sounds      The completion chime, copied into the app bundle
+Tests/FloaterCoreTests  125 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

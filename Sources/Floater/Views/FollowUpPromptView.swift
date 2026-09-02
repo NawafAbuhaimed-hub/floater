@@ -20,7 +20,10 @@ struct FollowUpPromptView: View {
                 presets
             }
             if let error = model.followUpError {
-                errorRow(error)
+                errorRow(error.message, permission: error.isPermissionProblem)
+            }
+            if let logError = model.completionLogError {
+                errorRow("Calendar log: " + logError, permission: false)
             }
         }
         .padding(13)
@@ -133,16 +136,16 @@ struct FollowUpPromptView: View {
         }
     }
 
-    private func errorRow(_ error: FollowUpError) -> some View {
+    private func errorRow(_ message: String, permission: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 10))
                 .foregroundStyle(Theme.color(for: .blocked))
-            Text(error.message)
+            Text(message)
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if error.isPermissionProblem {
+            if permission {
                 Button("Open Settings") { openPrivacySettings() }
                     .buttonStyle(.plain)
                     .font(.system(size: 10.5, weight: .semibold))

@@ -183,6 +183,29 @@ and a destructive delete.
 was blocking on a system access prompt before any window was created. The
 Keychain is now untouched until the Chat tab is opened.
 
+## Addendum — the completion log
+
+Finishing a task writes a calendar event titled `<task> ✅`, on the same calendar
+follow-ups use. It **ends** at the completion moment and **starts** a
+focused-time earlier, so the calendar shows the real work block rather than a
+uniform marker; a task finished without ever running a timer gets a 15 minute
+block instead.
+
+**Reopening deletes the event.** A task that is no longer done but still has a
+✅ on the calendar is simply wrong, so the event id is stored on the task and
+removed whenever it leaves Done — by reopen, by a status change, or by deletion.
+That is what `remove(id:destination:)` on the scheduler is for.
+
+**The calendar cannot veto a completion.** The write runs detached; a failure
+sets `completionLogError` and surfaces in the follow-up card that is already on
+screen, but the task is done either way. Tested.
+
+`FollowUpRequest` was renamed `ScheduleRequest` — it now serves two different
+kinds of write, and the old name had stopped being true.
+
+The completion chime is a bundled mp3 in `Resources/Sounds`, copied into the app
+bundle by `build.sh`, with a system sound as the fallback if it is missing.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,

@@ -7,7 +7,7 @@ final class FakeScheduler: FollowUpScheduling, @unchecked Sendable {
     var accessGranted = true
     var errorToThrow: Error?
     private(set) var accessRequests: [FollowUpDestination] = []
-    private(set) var scheduled: [FollowUpRequest] = []
+    private(set) var scheduled: [ScheduleRequest] = []
     var nextExternalID = "external-1"
 
     func requestAccess(to destination: FollowUpDestination) async -> Bool {
@@ -20,7 +20,14 @@ final class FakeScheduler: FollowUpScheduling, @unchecked Sendable {
         accessGranted ? targets : []
     }
 
-    func schedule(_ request: FollowUpRequest) async throws -> String {
+    private(set) var removed: [String] = []
+    func remove(id: String, destination: FollowUpDestination) async throws {
+        if let removalError { throw removalError }
+        removed.append(id)
+    }
+    var removalError: Error?
+
+    func schedule(_ request: ScheduleRequest) async throws -> String {
         if let errorToThrow { throw errorToThrow }
         scheduled.append(request)
         return nextExternalID
@@ -132,6 +139,9 @@ final class FollowUpSchedulingTests: XCTestCase {
         scheduler = FakeScheduler()
         model = AppModel(store: store, prefs: Preferences(store: InMemoryStore()),
                          clock: clock, calendar: calendar, scheduler: scheduler, autoTick: false)
+        // These tests are about the follow-up prompt; the completion log is a
+        // second, independent calendar write covered by CompletionLogTests.
+        model.logCompletions = false
     }
 
     @discardableResult
@@ -177,6 +187,7 @@ final class FollowUpSchedulingTests: XCTestCase {
         let prefs = Preferences(store: InMemoryStore())
         model = AppModel(store: store, prefs: prefs, clock: clock, calendar: calendar,
                          scheduler: scheduler, autoTick: false)
+        model.logCompletions = false
         completeATask()
         model.followUpDestination = .reminders
 
@@ -250,6 +261,18 @@ final class FollowUpSchedulingTests: XCTestCase {
         XCTAssertNotNil(model.pendingFollowUp)
     }
 
+    func testTheCompletionLogAndTheFollowUpAreSeparateWrites() async {
+        model.logCompletions = true
+        completeATask("Both writes")
+        for _ in 0..<10 { await Task.yield() }
+        await model.scheduleFollowUp(.tomorrow)
+
+        let titles = scheduler.scheduled.map(\.title)
+        XCTAssertEqual(titles.count, 2)
+        XCTAssertTrue(titles.contains("Both writes \u{2705}"), "the done log")
+        XCTAssertTrue(titles.contains("Follow up: Both writes"), "the follow-up")
+    }
+
     func testAFollowUpSurvivesReopeningTheStore() async {
         let task = completeATask()
         await model.scheduleFollowUp(.tomorrow)
@@ -277,6 +300,7 @@ final class FollowUpTargetTests: XCTestCase {
         ]
         model = AppModel(store: store, prefs: prefs, clock: TestClock(),
                          scheduler: scheduler, autoTick: false)
+        model.logCompletions = false
     }
 
     private func completeATask() {
