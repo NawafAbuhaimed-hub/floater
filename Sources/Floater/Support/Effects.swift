@@ -5,30 +5,37 @@ import UserNotifications
 enum Sounds {
     /// Held so the sound is not deallocated mid-playback.
     private static var player: NSSound?
-    private static var rotation: SoundRotation?
+    /// One rotation per sound set: "done" on completion, "more" on extending.
+    private static var rotations: [String: SoundRotation] = [:]
 
-    /// Every mp3 in the bundle joins the rotation, in filename order — dropping
-    /// a new one into Resources/Sounds is all it takes to add it.
+    /// Sets are directories inside the bundle, so dropping an mp3 into
+    /// Resources/Sounds/<set> is all it takes to add one.
     static func configure(prefs: Preferences) {
-        let names = (Bundle.main.urls(forResourcesWithExtension: "mp3", subdirectory: nil) ?? [])
-            .map { $0.deletingPathExtension().lastPathComponent }
-            .sorted()
-        rotation = SoundRotation(names: names, prefs: prefs)
+        for set in ["done", "more"] {
+            let names = (Bundle.main.urls(forResourcesWithExtension: "mp3", subdirectory: set) ?? [])
+                .map { $0.deletingPathExtension().lastPathComponent }
+                .sorted()
+            rotations[set] = SoundRotation(names: names, prefs: prefs, key: set)
+        }
     }
 
-    /// The next completion sound, falling back to a system one if the bundle
-    /// has none.
-    static func celebrate() {
-        if let name = rotation?.next(),
-           let url = Bundle.main.url(forResource: name, withExtension: "mp3"),
+    /// The next sound from a set, falling back to a system one if it is empty.
+    private static func play(set: String, fallback: String) {
+        if let name = rotations[set]?.next(),
+           let url = Bundle.main.url(forResource: name, withExtension: "mp3", subdirectory: set),
            let sound = NSSound(contentsOf: url, byReference: true) {
             player?.stop()
             player = sound
             sound.play()
             return
         }
-        NSSound(named: "Hero")?.play()
+        NSSound(named: fallback)?.play()
     }
+
+    static func celebrate() { play(set: "done", fallback: "Hero") }
+
+    /// Played when more time is added to a task.
+    static func moreTime() { play(set: "more", fallback: "Pop") }
 
     static func timeUp() { NSSound(named: "Submarine")?.play() }
 }

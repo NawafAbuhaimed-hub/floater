@@ -5,10 +5,13 @@ import Foundation
 public final class SoundRotation {
     private let names: [String]
     private let prefs: Preferences
+    /// Each set ("done", "more") keeps its own position.
+    private let key: String
 
-    public init(names: [String], prefs: Preferences) {
+    public init(names: [String], prefs: Preferences, key: String) {
         self.names = names
         self.prefs = prefs
+        self.key = key
     }
 
     public var count: Int { names.count }
@@ -18,8 +21,9 @@ public final class SoundRotation {
         guard !names.isEmpty else { return nil }
         // Modulo rather than a bounds check, so removing sounds cannot leave a
         // stored index pointing past the end.
-        let index = ((prefs.completionSoundIndex % names.count) + names.count) % names.count
-        prefs.completionSoundIndex = index + 1
+        let stored = prefs.soundIndex(forKey: key)
+        let index = ((stored % names.count) + names.count) % names.count
+        prefs.setSoundIndex(index + 1, forKey: key)
         return names[index]
     }
 }

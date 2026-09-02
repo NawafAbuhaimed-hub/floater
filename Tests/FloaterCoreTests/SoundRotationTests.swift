@@ -3,7 +3,7 @@ import XCTest
 
 final class SoundRotationTests: XCTestCase {
     private func rotation(_ names: [String], prefs: Preferences) -> SoundRotation {
-        SoundRotation(names: names, prefs: prefs)
+        SoundRotation(names: names, prefs: prefs, key: "done")
     }
 
     func testItCyclesInOrderAndWrapsAround() {
@@ -27,13 +27,13 @@ final class SoundRotationTests: XCTestCase {
     func testAStoredIndexPastTheEndWrapsInsteadOfCrashing() {
         let store = InMemoryStore()
         let prefs = Preferences(store: store)
-        prefs.completionSoundIndex = 99 // as if sounds had been removed since
+        prefs.setSoundIndex(99, forKey: "done") // as if sounds had been removed since
         XCTAssertEqual(rotation(["a", "b"], prefs: prefs).next(), "b", "99 % 2 == 1")
     }
 
     func testANegativeStoredIndexIsStillInBounds() {
         let prefs = Preferences(store: InMemoryStore())
-        prefs.completionSoundIndex = -3
+        prefs.setSoundIndex(-3, forKey: "done")
         XCTAssertEqual(rotation(["a", "b"], prefs: prefs).next(), "b")
     }
 
@@ -52,8 +52,79 @@ final class SoundRotationTests: XCTestCase {
         let prefs = Preferences(store: InMemoryStore())
         let sounds = rotation(["a", "b", "c"], prefs: prefs)
         _ = sounds.next()
-        XCTAssertEqual(prefs.completionSoundIndex, 1)
+        XCTAssertEqual(prefs.soundIndex(forKey: "done"), 1)
         _ = sounds.next()
-        XCTAssertEqual(prefs.completionSoundIndex, 2)
+        XCTAssertEqual(prefs.soundIndex(forKey: "done"), 2)
+    }
+}
+
+final class SoundSetTests: XCTestCase {
+    func testEachSetKeepsItsOwnPosition() {
+        let prefs = Preferences(store: InMemoryStore())
+        let done = SoundRotation(names: ["a", "b"], prefs: prefs, key: "done")
+        let more = SoundRotation(names: ["x", "y"], prefs: prefs, key: "more")
+
+        XCTAssertEqual(done.next(), "a")
+        XCTAssertEqual(done.next(), "b")
+        XCTAssertEqual(more.next(), "x", "advancing one set must not move the other")
+        XCTAssertEqual(done.next(), "a")
+        XCTAssertEqual(more.next(), "y")
+    }
+}
+
+@MainActor
+final class ExtendSoundTests: XCTestCase {
+    private var clock: TestClock!
+    private var model: AppModel!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        clock = TestClock()
+        model = AppModel(store: try Store(inMemory: true),
+                         prefs: Preferences(store: InMemoryStore()),
+                         clock: clock, autoTick: false)
+    }
+
+    private func runningTask() -> TaskItem {
+        model.draft = "Needs longer"
+        model.addDraftTask()
+        let task = model.tasks[0]
+        model.start(task, minutes: 15)
+        return task
+    }
+
+    func testExtendingAnnouncesItselfWithTheMinutesAdded() {
+        var extended: [Int] = []
+        model.onExtend = { extended.append($0) }
+        _ = runningTask()
+
+        model.extend(minutes: 10)
+        model.extend(minutes: 5)
+
+        XCTAssertEqual(extended, [10, 5])
+    }
+
+    func testExtendingFromTimeUpAlsoAnnounces() {
+        var extended: [Int] = []
+        _ = runningTask()
+        clock.advance(15 * 60)
+        model.tick()
+        XCTAssertEqual(model.phase, .elapsed)
+
+        model.onExtend = { extended.append($0) }
+        model.extend(minutes: 10)
+
+        XCTAssertEqual(extended, [10])
+        XCTAssertTrue(model.isRunning)
+    }
+
+    func testExtendingWithNoTimerRunningDoesNothing() {
+        var extended: [Int] = []
+        model.onExtend = { extended.append($0) }
+
+        model.extend(minutes: 10)
+
+        XCTAssertTrue(extended.isEmpty, "no timer means nothing to extend, and no sound")
+        XCTAssertFalse(model.isActive)
     }
 }

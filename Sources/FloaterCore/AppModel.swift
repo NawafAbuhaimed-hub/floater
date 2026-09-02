@@ -79,6 +79,8 @@ public final class AppModel: ObservableObject {
     public var onCelebrate: ((String) -> Void)?
     public var onTimeUp: ((FocusRun) -> Void)?
     public var onDismissTimeUp: (() -> Void)?
+    /// Fired when the user buys themselves more time on a task.
+    public var onExtend: ((Int) -> Void)?
     /// Writes to Calendar / Reminders. Injected by the app layer; nil in tests
     /// that do not exercise follow-ups.
     public var scheduler: FollowUpScheduling?
@@ -578,9 +580,11 @@ public final class AppModel: ObservableObject {
     }
 
     public func extend(minutes: Int) {
+        guard engine.isActive else { return }
         engine.extend(minutes: minutes)
         onDismissTimeUp?()
         refresh()
+        onExtend?(minutes)
     }
 
     /// "Stop": bank the focused time, leave the task open.

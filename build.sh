@@ -15,7 +15,12 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Floater"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
-cp Resources/Sounds/*.mp3 "$APP/Contents/Resources/" 2>/dev/null || true
+# Each sound set keeps its own subdirectory inside the bundle.
+for set_dir in Resources/Sounds/*/; do
+    set_name="$(basename "$set_dir")"
+    mkdir -p "$APP/Contents/Resources/$set_name"
+    cp "$set_dir"*.mp3 "$APP/Contents/Resources/$set_name/" 2>/dev/null || true
+done
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 echo "==> Signing (ad-hoc)"

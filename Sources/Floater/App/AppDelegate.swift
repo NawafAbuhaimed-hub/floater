@@ -41,6 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onCelebrate = { [weak self] title in self?.celebrate(title) }
         model.onTimeUp = { [weak self] run in self?.showTimeUp(run) }
         model.onDismissTimeUp = { [weak self] in self?.takeover.dismiss() }
+        model.onExtend = { [weak self] _ in
+            guard self?.model.soundEnabled == true else { return }
+            Sounds.moreTime()
+        }
         model.scheduler = EventKitScheduler()
 
         // The prompt appears with the confetti and clears itself unless the user

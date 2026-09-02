@@ -203,13 +203,20 @@ screen, but the task is done either way. Tested.
 `FollowUpRequest` was renamed `ScheduleRequest` — it now serves two different
 kinds of write, and the old name had stopped being true.
 
-Completion sounds rotate round-robin through every mp3 in `Resources/Sounds`,
+There are two sound sets — `done/` on completion and `more/` when time is added
+to a task — each a directory in the bundle with its own independently persisted
+position, so playing one never advances the other. Sounds rotate round-robin
+through every mp3 in the set,
 discovered from the bundle at launch rather than listed in code — adding one is
 a file copy. The position is persisted, so the rotation continues across
 launches instead of restarting on the first sound every session. The index is
 taken modulo the count rather than bounds-checked, so removing sounds cannot
 leave a stored index pointing past the end. A system sound remains the fallback
-when the bundle has none.
+when a set is empty.
+
+Extending is announced through `onExtend`, which fires only when a timer is
+actually running — pressing "+10 min" with nothing active is a no-op and makes
+no sound.
 
 ## Deliberately not built
 

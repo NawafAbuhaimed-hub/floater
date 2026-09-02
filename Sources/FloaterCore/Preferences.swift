@@ -28,7 +28,7 @@ public final class Preferences {
         static let panelOrigin = "floater.panelOrigin"
         static let followUpDestination = "floater.followUpDestination"
         static let logCompletions = "floater.logCompletions"
-        static let completionSoundIndex = "floater.completionSoundIndex"
+        static let soundIndexPrefix = "floater.soundIndex."
         static let followUpTargetPrefix = "floater.followUpTarget."
         static let collapsedSize = "floater.collapsedSize"
         static let expandedSize = "floater.expandedSize"
@@ -79,10 +79,13 @@ public final class Preferences {
         set { store.set(newValue, forKey: Key.logCompletions) }
     }
 
-    /// Where the completion-sound rotation has got to.
-    public var completionSoundIndex: Int {
-        get { store.object(forKey: Key.completionSoundIndex) as? Int ?? 0 }
-        set { store.set(newValue, forKey: Key.completionSoundIndex) }
+    /// Where each sound rotation has got to, per set.
+    public func soundIndex(forKey key: String) -> Int {
+        store.object(forKey: Key.soundIndexPrefix + key) as? Int ?? 0
+    }
+
+    public func setSoundIndex(_ index: Int, forKey key: String) {
+        store.set(index, forKey: Key.soundIndexPrefix + key)
     }
 
     public var panelOrigin: CGPoint? {
