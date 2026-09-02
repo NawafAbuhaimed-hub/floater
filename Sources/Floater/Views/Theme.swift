@@ -31,13 +31,11 @@ struct GlassBackground: View {
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(.regularMaterial)
-            // A white rim reads as a highlight in both appearances. `Color.primary`
-            // resolves to black in light mode, which drew a hard black hairline.
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
+            // No stroke and no SwiftUI shadow. A shadow drawn inside the view is
+            // clipped at the window bounds, and a soft gradient cut off mid-fall
+            // reads as a hard dark line along the edge. The panel's native window
+            // shadow is drawn by the window server outside those bounds instead,
+            // so it can never be clipped.
     }
 }
 

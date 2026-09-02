@@ -218,6 +218,32 @@ Extending is announced through `onExtend`, which fires only when a timer is
 actually running — pressing "+10 min" with nothing active is a no-op and makes
 no sound.
 
+## The black edge line, settled by measurement
+
+Reported three times and guessed at twice — first the rim stroke
+(`Color.primary` resolves to black in light appearance), then the `.resizable`
+style mask. Neither was it.
+
+The cause was the SwiftUI `.shadow(radius: 12, y: 4)` inside `GlassBackground`,
+drawn within a window whose content had only 6pt of transparent padding. A
+shadow drawn inside a view is clipped at the window bounds, so the gradient was
+cut off part-way down its falloff — and a soft gradient ending in a hard step is
+indistinguishable from a drawn line.
+
+The fix is to let the window server draw the shadow instead: it renders outside
+the window bounds and cannot be clipped. `GlassBackground` now carries no stroke
+and no shadow, and the panel's `hasShadow` does the work, with
+`invalidateShadow()` after every frame change so it tracks the rounded shape.
+
+**How it was verified**, since the screen itself is not visible from the agent's
+side: render the view offscreen into an `NSBitmapImageRep` via
+`bitmapImageRepForCachingDisplay` / `cacheDisplay`, composite it over a known
+background, and read a luminance scanline outward from the card edge. Before,
+the light-mode top edge read 231 at y=0 and climbed to 244 — a shadow still
+mid-gradient at the boundary. After, it reads a flat 254 until the card begins.
+That is a measurement, not an opinion, and the same technique settles any future
+"it looks wrong" report.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,

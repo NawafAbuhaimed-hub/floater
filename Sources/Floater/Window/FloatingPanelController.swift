@@ -115,6 +115,7 @@ final class FloatingPanelController {
             height: target.height
         )
         panel.setFrame(clamped(frame), display: true)
+        panel.invalidateShadow()
         rememberSize()
     }
 
@@ -139,6 +140,9 @@ final class FloatingPanelController {
         )
         frame = clamped(frame)
         panel.setFrame(frame, display: true, animate: true)
+        // The native shadow is derived from the content's alpha; without this it
+        // keeps the shape it had before the resize.
+        panel.invalidateShadow()
 
         if mode == .expanded {
             // Becomes key without activating the app, so typing works but focus
