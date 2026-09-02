@@ -41,6 +41,17 @@ timers and a confetti burst when you finish something.
   stored locally with SwiftData. A running timer survives sleep, quit, and
   relaunch.
 
+## Sharing it
+
+`./package.sh` produces `build/Floater.dmg` — a universal (Apple Silicon +
+Intel) build with all sounds bundled, plus install notes. It refuses to build
+if an API key ever ends up inside the bundle.
+
+Floater is ad-hoc signed, not notarised, so a Mac that downloads the DMG will
+block the first launch. `docs/INSTALL.txt` (shown inside the DMG) explains the
+one-time Privacy & Security step. Handing someone the source instead avoids
+that entirely — a locally built app is not quarantined.
+
 ## Build and run
 
 ```bash

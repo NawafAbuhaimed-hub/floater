@@ -1,0 +1,50 @@
+Floater — a task tracker that floats above every window
+======================================================
+
+INSTALL
+  1. Drag Floater into the Applications folder shown here.
+  2. Open it from Applications.
+
+FIRST LAUNCH — macOS WILL BLOCK IT
+  Floater is not signed with a paid Apple developer certificate, so macOS
+  refuses to open it the first time and may say it is "damaged". It is not.
+  It just has no certificate Apple recognises.
+
+  To open it:
+    - Try to open Floater once, and let it be blocked.
+    - Open System Settings -> Privacy & Security.
+    - Scroll down. There will be a line about Floater being blocked,
+      with an "Open Anyway" button. Click it, then confirm.
+
+  You only have to do this once.
+
+  If macOS still refuses, open Terminal and run:
+    xattr -dr com.apple.quarantine /Applications/Floater.app
+
+USING IT
+  Floater has no Dock icon. It lives in the menu bar — look for the timer
+  glyph. That is where you show or hide the floating pill, change settings,
+  and quit.
+
+  - Click the chevron on the pill to open the task list.
+  - Type a task, press Return.
+  - Hover a task and click 15, 30 or 45 to start a focus timer.
+  - Click the circle to cycle its status; the check button marks it done.
+  - Drag the pill anywhere. Drag the bottom-right corner to resize.
+
+WHAT IT ASKS FOR
+  Calendar / Reminders — only if you use follow-ups or the completion log.
+  Both are optional and the app works fully without them.
+
+  Notifications — for the "time's up" banner.
+
+  Chat tab — needs your OWN Anthropic API key from console.anthropic.com.
+  It is stored in your Mac's Keychain and sent only to Anthropic. You pay
+  for your own usage, a fraction of a cent per message. Everything else in
+  Floater works without a key.
+
+REQUIREMENTS
+  macOS 14 or later. Runs natively on both Apple Silicon and Intel.
+
+YOUR DATA
+  Tasks, notes and history are stored locally on your Mac and never leave it.
