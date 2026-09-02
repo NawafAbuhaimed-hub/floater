@@ -203,8 +203,13 @@ screen, but the task is done either way. Tested.
 `FollowUpRequest` was renamed `ScheduleRequest` — it now serves two different
 kinds of write, and the old name had stopped being true.
 
-The completion chime is a bundled mp3 in `Resources/Sounds`, copied into the app
-bundle by `build.sh`, with a system sound as the fallback if it is missing.
+Completion sounds rotate round-robin through every mp3 in `Resources/Sounds`,
+discovered from the bundle at launch rather than listed in code — adding one is
+a file copy. The position is persisted, so the rotation continues across
+launches instead of restarting on the first sound every session. The index is
+taken modulo the count rather than bounds-checked, so removing sounds cannot
+leave a stored index pointing past the end. A system sound remains the fallback
+when the bundle has none.
 
 ## Deliberately not built
 

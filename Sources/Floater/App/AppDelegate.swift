@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let prefs = Preferences()
+        Sounds.configure(prefs: prefs)
         let keyStore = KeychainAPIKeyStore()
         model = AppModel(
             store: store,

@@ -28,6 +28,7 @@ public final class Preferences {
         static let panelOrigin = "floater.panelOrigin"
         static let followUpDestination = "floater.followUpDestination"
         static let logCompletions = "floater.logCompletions"
+        static let completionSoundIndex = "floater.completionSoundIndex"
         static let followUpTargetPrefix = "floater.followUpTarget."
         static let collapsedSize = "floater.collapsedSize"
         static let expandedSize = "floater.expandedSize"
@@ -76,6 +77,12 @@ public final class Preferences {
     public var logCompletions: Bool {
         get { store.object(forKey: Key.logCompletions) as? Bool ?? true }
         set { store.set(newValue, forKey: Key.logCompletions) }
+    }
+
+    /// Where the completion-sound rotation has got to.
+    public var completionSoundIndex: Int {
+        get { store.object(forKey: Key.completionSoundIndex) as? Int ?? 0 }
+        set { store.set(newValue, forKey: Key.completionSoundIndex) }
     }
 
     public var panelOrigin: CGPoint? {

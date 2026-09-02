@@ -5,12 +5,23 @@ import UserNotifications
 enum Sounds {
     /// Held so the sound is not deallocated mid-playback.
     private static var player: NSSound?
-    private static let completionFile = Bundle.main.url(forResource: "complete", withExtension: "mp3")
+    private static var rotation: SoundRotation?
 
-    /// The bundled completion sound, falling back to a system one if the file
-    /// is missing from the bundle.
+    /// Every mp3 in the bundle joins the rotation, in filename order — dropping
+    /// a new one into Resources/Sounds is all it takes to add it.
+    static func configure(prefs: Preferences) {
+        let names = (Bundle.main.urls(forResourcesWithExtension: "mp3", subdirectory: nil) ?? [])
+            .map { $0.deletingPathExtension().lastPathComponent }
+            .sorted()
+        rotation = SoundRotation(names: names, prefs: prefs)
+    }
+
+    /// The next completion sound, falling back to a system one if the bundle
+    /// has none.
     static func celebrate() {
-        if let completionFile, let sound = NSSound(contentsOf: completionFile, byReference: true) {
+        if let name = rotation?.next(),
+           let url = Bundle.main.url(forResource: name, withExtension: "mp3"),
+           let sound = NSSound(contentsOf: url, byReference: true) {
             player?.stop()
             player = sound
             sound.play()

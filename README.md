@@ -15,7 +15,9 @@ timers and a confetti burst when you finish something.
   notification, and a full-screen "did you finish?" card with Done / +10 min /
   Stop. The full-screen part can be turned off from the menu bar.
 - **Confetti on completion.** Ticking a task off bursts confetti across the
-  screen and plays a bundled chime.
+  screen and plays the next sound in a rotation, so you don't hear the same one
+  twice in a row. Drop an mp3 into `Resources/Sounds` and it joins the rotation
+  — no code change.
 - **A done log on your calendar.** Finishing a task writes an event titled
   `Task name ✅`, ending at the moment you finished and reaching back over the
   time you actually focused — so the calendar shows real work blocks. Reopening
@@ -42,7 +44,7 @@ timers and a confetti burst when you finish something.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 125 tests
+swift test        # 132 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -113,8 +115,9 @@ Two things worth knowing:
 Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
                       Claude client and the chat proposal engine
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
-Resources/Sounds      The completion chime, copied into the app bundle
-Tests/FloaterCoreTests  125 tests over the engine, store, statuses, notes, app model
+Resources/Sounds      Completion sounds, played in filename order and
+                      copied into the app bundle by build.sh
+Tests/FloaterCoreTests  132 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes
