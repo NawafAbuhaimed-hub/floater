@@ -5,10 +5,20 @@ import Foundation
 // dark rounded tile, with a streak flame in the corner.
 let size: CGFloat = 1024
 
-func draw() -> NSImage {
-    let image = NSImage(size: NSSize(width: size, height: size))
-    image.lockFocus()
-    guard let ctx = NSGraphicsContext.current?.cgContext else { image.unlockFocus(); return image }
+/// Renders at exactly `size` pixels. `NSImage.lockFocus` adopts the display's
+/// backing scale, which silently doubles the output on a Retina Mac — and Slack,
+/// among others, rejects anything over 2000px.
+func draw() -> NSBitmapImageRep {
+    let pixels = Int(size)
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+    )!
+    rep.size = NSSize(width: size, height: size)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    let ctx = NSGraphicsContext.current!.cgContext
 
     // Tile
     let tile = NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size),
@@ -84,17 +94,15 @@ func draw() -> NSImage {
         }
     }
 
-    image.unlockFocus()
-    return image
+    NSGraphicsContext.restoreGraphicsState()
+    return rep
 }
 
-let image = draw()
-guard let tiff = image.tiffRepresentation,
-      let rep = NSBitmapImageRep(data: tiff),
-      let png = rep.representation(using: .png, properties: [:]) else {
+let rep = draw()
+guard let png = rep.representation(using: .png, properties: [:]) else {
     FileHandle.standardError.write("failed to render\n".data(using: .utf8)!)
     exit(1)
 }
 let out = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "icon-1024.png"
 try! png.write(to: URL(fileURLWithPath: out))
-print("wrote \(out)")
+print("wrote \(out) at \(rep.pixelsWide)x\(rep.pixelsHigh)")
