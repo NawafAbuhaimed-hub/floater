@@ -80,7 +80,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 205 tests
+swift test        # 199 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -156,7 +156,7 @@ Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
 Resources/Sounds/done Played when a task is finished
 Resources/Sounds/more Played when more time is added to a task
-Tests/FloaterCoreTests  205 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  199 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes
