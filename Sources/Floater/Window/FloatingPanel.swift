@@ -34,4 +34,16 @@ final class FloatingPanel: NSPanel {
     /// Escape collapses instead of beeping.
     var onCancel: (() -> Void)?
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+
+    /// Cmd-C reaches the window only when no text field consumed it first, so
+    /// this copies the selected task without ever stealing copy from a field.
+    var onCopy: (() -> Bool)?
+    @objc func copy(_ sender: Any?) {
+        _ = onCopy?()
+    }
+
+    override func responds(to selector: Selector!) -> Bool {
+        if selector == #selector(copy(_:)) { return onCopy != nil }
+        return super.responds(to: selector)
+    }
 }

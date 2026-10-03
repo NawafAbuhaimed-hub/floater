@@ -28,6 +28,12 @@ final class FloatingPanelController {
         panel = FloatingPanel(contentRect: NSRect(origin: .zero, size: size))
 
         panel.onCancel = { [weak model] in model?.mode = .collapsed }
+        panel.onCopy = { [weak model] in
+            guard let text = model?.clipboardTextForSelection() else { return false }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            return true
+        }
 
         // The corner grip drives `resizeBy` directly, so dragging the corner
         // works regardless of how the borderless window handles resize edges.

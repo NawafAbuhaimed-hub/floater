@@ -1,4 +1,5 @@
 import FloaterCore
+import AppKit
 import SwiftUI
 
 /// The expanded panel: add a task, set its status, start a timer on it, take
@@ -55,9 +56,10 @@ struct ExpandedView: View {
         HStack(spacing: 8) {
             Image(systemName: "plus.circle.fill")
                 .foregroundStyle(.tertiary)
-            TextField("What are you working on?", text: $model.draft)
+            TextField("What are you working on?", text: $model.draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
+                .lineLimit(1...4)
                 .focused($draftFocused)
                 .onSubmit { model.addDraftTask() }
         }
@@ -200,9 +202,23 @@ struct TaskRow: View {
     let task: TaskItem
     @EnvironmentObject private var model: AppModel
     @State private var hovering = false
+    @State private var copied = false
+
+    private func copyTask() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(model.clipboardText(for: task), forType: .string)
+        copied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+    }
 
     private var isActive: Bool { task.id == model.activeTaskID }
     private var isNoteOpen: Bool { model.expandedTaskID == task.id }
+    private var isSelected: Bool { model.selectedTaskID == task.id }
+
+    private var rowBackground: Color {
+        if isSelected { return Theme.accent.opacity(0.10) }
+        return hovering ? Color.primary.opacity(0.05) : .clear
+    }
     private var statusColor: Color { Theme.color(for: task.status) }
 
     var body: some View {
@@ -210,9 +226,17 @@ struct TaskRow: View {
             mainRow
             if isNoteOpen { noteSection }
         }
-        .background(hovering ? Color.primary.opacity(0.05) : .clear)
+        .background(rowBackground)
+        .overlay(alignment: .leading) {
+            // A selected row gets a left bar rather than a border, so nothing
+            // reads as an outline around the panel.
+            if isSelected {
+                Rectangle().fill(Theme.accent).frame(width: 2)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .onTapGesture { model.select(task) }
         .contextMenu {
             ForEach(TaskStatus.allCases) { status in
                 Button {
@@ -223,6 +247,7 @@ struct TaskRow: View {
                 .disabled(task.status == status)
             }
             Divider()
+            Button("Copy task") { copyTask() }
             Button(isNoteOpen ? "Hide note" : "Add note") { model.toggleNote(for: task) }
             Button("Delete", role: .destructive) { model.delete(task) }
         }
@@ -335,6 +360,23 @@ struct TaskRow: View {
 
     private var noteSection: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // The row caps the title at two lines; here it is shown in full and
+            // can be selected with the mouse.
+            HStack(alignment: .top, spacing: 6) {
+                Text(task.title)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button { copyTask() } label: {
+                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(copied ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
+                        .frame(width: 20, height: 18)
+                }
+                .buttonStyle(.plain)
+                .help("Copy task (\u{2318}C)")
+            }
             StatusPicker(current: task.status) { model.setStatus($0, for: task) }
             NoteEditor(
                 text: Binding(

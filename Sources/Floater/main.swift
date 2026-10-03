@@ -8,6 +8,7 @@ MainActor.assumeIsolated {
     let delegate = AppDelegate()
     app.delegate = delegate
     app.setActivationPolicy(.accessory)
+    MainMenu.install()
     // Keep the delegate alive for the process lifetime.
     withExtendedLifetime(delegate) {
         app.run()

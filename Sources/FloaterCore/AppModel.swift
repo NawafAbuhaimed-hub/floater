@@ -64,6 +64,8 @@ public final class AppModel: ObservableObject {
     @Published public var tab: Tab = .tasks
     /// The task whose note is open inline, if any.
     @Published public var expandedTaskID: UUID?
+    /// The task Cmd-C acts on when no text field has focus.
+    @Published public private(set) var selectedTaskID: UUID?
     @Published public var draft: String = ""
     /// Global notes pane. Written through to the store on a short debounce so
     /// typing does not hit SwiftData on every keystroke.
@@ -139,6 +141,7 @@ public final class AppModel: ObservableObject {
     public var isRunning: Bool { phase == .running }
     public var isActive: Bool { phase != .idle }
     public var activeTask: TaskItem? { activeTaskID.flatMap { id in tasks.first { $0.id == id } } }
+    public var selectedTask: TaskItem? { selectedTaskID.flatMap { id in tasks.first { $0.id == id } } }
 
     public var remainingText: String {
         let total = Int(remaining.rounded(.up))
@@ -147,10 +150,34 @@ public final class AppModel: ObservableObject {
 
     // MARK: - Task actions
 
+    /// One task per non-blank line, so pasting a list in and pressing Return
+    /// creates the whole list rather than one task with newlines in its title.
     public func addDraftTask() {
-        guard store.add(title: draft) != nil else { return }
+        let lines = draft
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        guard !lines.isEmpty else { return }
+        for line in lines { store.add(title: line) }
         draft = ""
         refresh()
+    }
+
+    public func select(_ task: TaskItem?) {
+        selectedTaskID = task?.id
+    }
+
+    /// Plain text form of a task for the clipboard: the title, and the note
+    /// below it when there is one. No status or dates — this is text meant to be
+    /// pasted somewhere else, not a report.
+    public func clipboardText(for task: TaskItem) -> String {
+        let note = task.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        return note.isEmpty ? task.title : task.title + "\n\n" + note
+    }
+
+    /// What Cmd-C should put on the clipboard, or nil when nothing is selected.
+    public func clipboardTextForSelection() -> String? {
+        selectedTask.map { clipboardText(for: $0) }
     }
 
     public func complete(_ task: TaskItem) {
@@ -181,6 +208,8 @@ public final class AppModel: ObservableObject {
 
     public func delete(_ task: TaskItem) {
         if task.id == activeTaskID { _ = finishActiveRun(completedTask: false) }
+        if task.id == selectedTaskID { selectedTaskID = nil }
+        if task.id == expandedTaskID { expandedTaskID = nil }
         unlogCompletion(task)
         store.delete(task)
         refresh()
@@ -231,8 +260,10 @@ public final class AppModel: ObservableObject {
         }
     }
 
+    /// Opening a task's note also selects it, so Cmd-C has an obvious target.
     public func toggleNote(for task: TaskItem) {
         expandedTaskID = expandedTaskID == task.id ? nil : task.id
+        selectedTaskID = task.id
     }
 
     public func noteChanged(_ text: String, for task: TaskItem) {

@@ -244,6 +244,33 @@ mid-gradient at the boundary. After, it reads a flat 254 until the card begins.
 That is a measurement, not an opinion, and the same technique settles any future
 "it looks wrong" report.
 
+## Editing shortcuts needed a main menu
+
+Copy and paste did not work *anywhere* in Floater — not the add field, notes,
+the scratchpad, or the chat box. macOS dispatches the standard editing
+shortcuts through the Edit menu, and an app with no main menu simply never
+receives them. Being an accessory app makes this easy to miss, because the menu
+bar is never shown; installing the menu changes nothing visually and fixes every
+field at once.
+
+**Cmd-C on a task without stealing Cmd-C from text fields.** A text field that
+has focus consumes the keystroke first; only when none does it reach the window.
+So `FloatingPanel` implements `copy(_:)` and copies the selected task there,
+and overrides `responds(to:)` so the menu item disables itself when nothing can
+handle it. No conditional logic about who has focus, no conflict.
+
+Clicking a task selects it; opening its note selects it too, so Cmd-C always has
+an obvious target. Deleting the selected task clears the selection rather than
+leaving an id pointing at a task that no longer exists.
+
+The add field takes several lines, and submitting creates one task per non-blank
+line — pasting a list in and pressing Return creates the list.
+
+Verified by inspecting the installed menu's key equivalents and selectors, and
+confirming `NSTextView` responds to each. `undo:` is the exception: it is routed
+through the undo manager rather than declared on `NSText`, so Cmd-Z is not proven
+the way the others are.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,
