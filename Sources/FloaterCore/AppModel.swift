@@ -106,7 +106,7 @@ public final class AppModel: ObservableObject {
 
     private let store: Store
     private let engine: TimerEngine
-    private let keyStore: APIKeyStore
+    private let secrets: SecretStore
     private var chat: ChatEngine?
     private let prefs: Preferences
     private let clock: Clock
@@ -122,7 +122,7 @@ public final class AppModel: ObservableObject {
         clock: Clock = SystemClock(),
         calendar: Calendar = .current,
         scheduler: FollowUpScheduling? = nil,
-        keyStore: APIKeyStore = InMemoryAPIKeyStore(),
+        secrets: SecretStore = InMemorySecretStore(),
         makeChatEngine: ((@escaping @Sendable () -> String?) -> ChatEngine)? = nil,
         autoTick: Bool = true
     ) {
@@ -131,7 +131,7 @@ public final class AppModel: ObservableObject {
         self.clock = clock
         self.calendar = calendar
         self.scheduler = scheduler
-        self.keyStore = keyStore
+        self.secrets = secrets
         self.followUpDestination = prefs.followUpDestination
         self.logCompletions = prefs.logCompletions
         self.sort = prefs.taskSort
@@ -373,21 +373,21 @@ public final class AppModel: ObservableObject {
     public func prepareChat() {
         guard !hasPreparedChat else { return }
         hasPreparedChat = true
-        hasAPIKey = !(keyStore.read() ?? "").isEmpty
+        hasAPIKey = secrets.has(.anthropic)
         rebuildChatEngine()
     }
 
     private func rebuildChatEngine() {
         guard hasAPIKey, let makeChatEngine else { chat = nil; return }
-        let keyStore = self.keyStore
-        let engine = makeChatEngine({ keyStore.read() })
+        let secrets = self.secrets
+        let engine = makeChatEngine({ secrets.secret(.anthropic) })
         engine.restore(transcript: store.chatMessages.map { ($0.roleRaw, $0.text) })
         chat = engine
     }
 
     public func saveAPIKey(_ key: String) {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, keyStore.write(trimmed) else { return }
+        guard !trimmed.isEmpty, secrets.setSecret(trimmed, for: .anthropic) else { return }
         hasPreparedChat = true
         hasAPIKey = true
         chatError = nil
@@ -395,7 +395,7 @@ public final class AppModel: ObservableObject {
     }
 
     public func clearAPIKey() {
-        keyStore.clear()
+        secrets.setSecret(nil, for: .anthropic)
         hasAPIKey = false
         chat = nil
     }

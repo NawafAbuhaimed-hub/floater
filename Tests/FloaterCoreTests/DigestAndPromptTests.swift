@@ -147,7 +147,7 @@ final class PromptGenerationTests: XCTestCase {
         context = FakeProjectContext()
         let fake = client!
         model = AppModel(store: store, prefs: Preferences(store: InMemoryStore()),
-                         clock: TestClock(), keyStore: InMemoryAPIKeyStore(value: "sk-test"),
+                         clock: TestClock(), secrets: InMemorySecretStore([.anthropic: "sk-test"]),
                          makeChatEngine: { _ in ChatEngine(client: fake) }, autoTick: false)
         model.projectContext = context
         model.logCompletions = false

@@ -132,7 +132,7 @@ final class ChatProposalTests: XCTestCase {
         model = AppModel(
             store: store, prefs: Preferences(store: InMemoryStore()), clock: clock,
             calendar: calendar, scheduler: scheduler,
-            keyStore: InMemoryAPIKeyStore(value: "sk-test"),
+            secrets: InMemorySecretStore([.anthropic: "sk-test"]),
             makeChatEngine: { _ in ChatEngine(client: fake, clock: self.clock, calendar: calendar) },
             autoTick: false
         )
@@ -327,7 +327,7 @@ final class ChatProposalTests: XCTestCase {
     func testChatIsUnavailableWithoutAKey() async throws {
         let bare = AppModel(store: try Store(inMemory: true),
                             prefs: Preferences(store: InMemoryStore()), clock: clock,
-                            keyStore: InMemoryAPIKeyStore(), autoTick: false)
+                            secrets: InMemorySecretStore(), autoTick: false)
         XCTAssertFalse(bare.hasAPIKey)
         bare.chatDraft = "hi"
         await bare.sendChat()
@@ -335,16 +335,16 @@ final class ChatProposalTests: XCTestCase {
     }
 
     func testSavingAKeyEnablesChat() throws {
-        let keyStore = InMemoryAPIKeyStore()
+        let keyStore = InMemorySecretStore()
         let bare = AppModel(store: try Store(inMemory: true),
                             prefs: Preferences(store: InMemoryStore()), clock: clock,
-                            keyStore: keyStore,
+                            secrets: keyStore,
                             makeChatEngine: { _ in ChatEngine(client: FakeClaudeClient()) },
                             autoTick: false)
         XCTAssertFalse(bare.hasAPIKey)
         bare.saveAPIKey("  sk-ant-test  ")
         XCTAssertTrue(bare.hasAPIKey)
-        XCTAssertEqual(keyStore.read(), "sk-ant-test", "the key is trimmed before storage")
+        XCTAssertEqual(keyStore.secret(.anthropic), "sk-ant-test", "the key is trimmed before storage")
     }
 
     func testClearingChatEmptiesTheTranscript() async {
@@ -379,7 +379,7 @@ final class ChatCategoryAndDueTests: XCTestCase {
         let tick = clock!
         model = AppModel(
             store: store, prefs: Preferences(store: InMemoryStore()), clock: clock,
-            calendar: cal, keyStore: InMemoryAPIKeyStore(value: "sk-test"),
+            calendar: cal, secrets: InMemorySecretStore([.anthropic: "sk-test"]),
             makeChatEngine: { _ in ChatEngine(client: fake, clock: tick, calendar: cal) },
             autoTick: false
         )
@@ -489,7 +489,7 @@ final class ChatCreateWithCategoryTests: XCTestCase {
         let client = FakeClaudeClient()
         let model = AppModel(
             store: store, prefs: Preferences(store: InMemoryStore()), clock: clock,
-            calendar: calendar, keyStore: InMemoryAPIKeyStore(value: "sk-test"),
+            calendar: calendar, secrets: InMemorySecretStore([.anthropic: "sk-test"]),
             makeChatEngine: { _ in ChatEngine(client: client, clock: clock, calendar: calendar) },
             autoTick: false
         )

@@ -26,11 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let prefs = Preferences()
         Sounds.configure(prefs: prefs)
-        let keyStore = KeychainAPIKeyStore()
+        let secrets = FileSecretStore()
         model = AppModel(
             store: store,
             prefs: prefs,
-            keyStore: keyStore,
+            secrets: secrets,
             makeChatEngine: { readKey in
                 ChatEngine(client: AnthropicClient(apiKey: readKey))
             }
