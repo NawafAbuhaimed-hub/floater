@@ -169,7 +169,12 @@ public final class AppModel: ObservableObject {
         restoreActiveRun()
         refresh()
         startDebouncedWrites()
-        if autoTick { startTicking() }
+        if autoTick {
+            startTicking()
+            // Without this the status only ever changed when a task was finished,
+            // so a day that started with the app already running showed nothing.
+            Task { await syncSlackStatus(force: true) }
+        }
     }
 
     deinit { ticker?.invalidate() }
@@ -599,6 +604,10 @@ public final class AppModel: ObservableObject {
 
     private var lastLevel: Int?
     private var lastStatusText: String?
+    private var lastStatusPush: Date?
+    /// How stale a status may get before it is pushed again, so the day's
+    /// progress stays current without writing to Slack on every tick.
+    public static let slackRefreshInterval: TimeInterval = 5 * 60
 
     private static let bragSystem = """
     You write one short Slack message celebrating what someone got done, from \
@@ -616,10 +625,12 @@ public final class AppModel: ObservableObject {
     public func syncSlackStatus(force: Bool = false) async {
         guard slackStatusEnabled, let slack, let stats else { return }
         let text = SlackStatus.text(for: stats)
-        guard force || text != lastStatusText else { return }
+        let stale = lastStatusPush.map { clock.now.timeIntervalSince($0) >= Self.slackRefreshInterval } ?? true
+        guard force || text != lastStatusText || stale else { return }
         do {
             try await slack.setStatus(text: text, emoji: SlackStatus.emoji(for: stats))
             lastStatusText = text
+            lastStatusPush = clock.now
             slackError = nil
         } catch let error as SlackError {
             slackError = error.message
@@ -998,7 +1009,10 @@ public final class AppModel: ObservableObject {
 
     private func startTicking() {
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            Task { @MainActor in
+                self?.tick()
+                await self?.syncSlackStatus()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         ticker = timer

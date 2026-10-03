@@ -183,3 +183,98 @@ final class SlackStatusTests: XCTestCase {
         XCTAssertEqual(SlackStatus.emoji(for: stats()), ":dart:")
     }
 }
+
+@MainActor
+final class SlackSyncTests: XCTestCase {
+    /// Records what would have been sent to Slack.
+    final class FakeSlack: SlackPosting, @unchecked Sendable {
+        private(set) var statuses: [(text: String, emoji: String)] = []
+        private(set) var posts: [(text: String, channel: String?)] = []
+        var failWith: Error?
+
+        func setStatus(text: String, emoji: String) async throws {
+            if let failWith { throw failWith }
+            statuses.append((text, emoji))
+        }
+        @discardableResult
+        func post(text: String, channel: String?) async throws -> String {
+            if let failWith { throw failWith }
+            posts.append((text, channel))
+            return channel ?? "self"
+        }
+    }
+
+    private var clock: TestClock!
+    private var model: AppModel!
+    private var slack: FakeSlack!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        clock = TestClock()
+        slack = FakeSlack()
+        model = AppModel(store: try Store(inMemory: true),
+                         prefs: Preferences(store: InMemoryStore()),
+                         clock: clock, autoTick: false)
+        model.slack = slack
+        model.logCompletions = false
+    }
+
+    func testNothingIsSentUntilTheUserTurnsItOn() async {
+        XCTAssertFalse(model.slackStatusEnabled, "Floater must not touch anyone's Slack uninvited")
+        await model.syncSlackStatus(force: true)
+        XCTAssertTrue(slack.statuses.isEmpty)
+    }
+
+    /// Switching the toggle pushes on its own, so settle that before measuring.
+    private func enableAndSettle() async -> Int {
+        model.slackStatusEnabled = true
+        for _ in 0..<20 { await Task.yield() }
+        return slack.statuses.count
+    }
+
+    func testTurningItOnPushesImmediately() async {
+        let pushes = await enableAndSettle()
+        XCTAssertEqual(pushes, 1, "switching it on should show the current figures at once")
+    }
+
+    func testAnUnchangedStatusIsNotSentAgainStraightAway() async {
+        let baseline = await enableAndSettle()
+        await model.syncSlackStatus()
+        await model.syncSlackStatus()
+        XCTAssertEqual(slack.statuses.count, baseline, "Slack should not be written to on every tick")
+    }
+
+    func testAStaleStatusIsRefreshedEvenWhenUnchanged() async {
+        let baseline = await enableAndSettle()
+        clock.advance(AppModel.slackRefreshInterval + 1)
+        await model.syncSlackStatus()
+        XCTAssertEqual(slack.statuses.count, baseline + 1,
+                       "the day's figures must not go stale on screen")
+    }
+
+    func testTurningItOffClearsWhatWasSet() async {
+        _ = await enableAndSettle()
+        await model.clearSlackStatus()
+        XCTAssertEqual(slack.statuses.last?.text, "")
+        XCTAssertEqual(slack.statuses.last?.emoji, "")
+    }
+
+    func testASlackFailureIsReportedAndDoesNotThrow() async {
+        slack.failWith = SlackError.api("invalid_auth")
+        model.slackStatusEnabled = true
+        await model.syncSlackStatus(force: true)
+        XCTAssertEqual(model.slackError, SlackError.api("invalid_auth").message)
+    }
+
+    func testFinishingATaskPushesTheNewFigures() async {
+        let before = await enableAndSettle()
+
+        model.draft = "Something"
+        model.addDraftTask()
+        model.complete(model.tasks[0])
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertGreaterThan(slack.statuses.count, before)
+        XCTAssertTrue(slack.statuses.last?.text.contains("1/5") ?? false, slack.statuses.last?.text ?? "")
+    }
+}
