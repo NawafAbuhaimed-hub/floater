@@ -113,6 +113,18 @@ public final class ChatEngine {
         return ChatTurn(reply: reply, actions: actions)
     }
 
+    /// A single question that never touches the conversation — used by the
+    /// digest and the prompt generator, which should not pollute the chat's
+    /// history or be affected by it.
+    public func oneOff(system: String, user: String, maxTokens: Int = 4096) async throws -> String {
+        let response = try await client.send(
+            MessagesRequest(model: model, maxTokens: maxTokens, system: system,
+                            messages: [.user(user)], tools: nil)
+        )
+        if response.stop_reason == "refusal" { throw ClaudeError.refused }
+        return response.text
+    }
+
     /// Records a rejected change set so the model does not keep re-proposing it.
     public func noteDiscarded() {
         history.append(.user("(I discarded those proposed changes.)"))

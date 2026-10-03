@@ -46,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Sounds.moreTime()
         }
         model.scheduler = EventKitScheduler()
+        model.projectContext = DiskProjectContext()
 
         // The prompt appears with the confetti and clears itself unless the user
         // starts interacting with it.

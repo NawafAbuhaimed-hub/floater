@@ -271,6 +271,30 @@ confirming `NSTextView` responds to each. `undo:` is the exception: it is routed
 through the undo manager rather than declared on `NSText`, so Cmd-Z is not proven
 the way the others are.
 
+## Addendum — the digest and the prompt generator
+
+**The digest never asks the model to remember anything.** `Store.digest(days:)`
+assembles the real figures — what was finished, when, under which project, how
+long was focused, what is still open, blocked or overdue — and renders them as a
+fact sheet. Claude is handed that sheet and told to phrase it, with an explicit
+instruction to use nothing else. A write-up that invents a task or a number is
+the obvious failure here, and the only reliable guard is to not let the model
+supply the facts.
+
+**Categories are what make the prompt generator work.** A category carries the
+repo it maps to, so a task's category selects which `CLAUDE.md`, design systems,
+git log and personal notes get read. Notes are scored by how many of the task's
+words they mention, with a strong signal for the project name and repo folder;
+the memory index is excluded because it mentions every project and so matches
+everything.
+
+Both run through `oneOff`, which never touches the chat conversation: a
+generation must not be steered by, or pollute, the chat history, and it offers
+no tools. Tested.
+
+The brief is capped per document and overall, so one generation cannot balloon
+into a large bill.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,

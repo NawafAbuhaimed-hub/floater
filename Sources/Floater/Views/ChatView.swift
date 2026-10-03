@@ -32,7 +32,7 @@ struct ChatView: View {
                     ForEach(model.chatMessages, id: \.id) { message in
                         bubble(message).id(message.id)
                     }
-                    if model.isSendingChat { thinkingRow.id("thinking") }
+                    if model.isSendingChat || model.isGenerating { thinkingRow.id("thinking") }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -65,7 +65,7 @@ struct ChatView: View {
     }
 
     private func bubble(_ message: ChatMessageRecord) -> some View {
-        HStack {
+        HStack(alignment: .bottom) {
             if message.isUser { Spacer(minLength: 28) }
             Text(message.text)
                 .font(.system(size: 12))
@@ -77,14 +77,27 @@ struct ChatView: View {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .fill(message.isUser ? Theme.accent.opacity(0.18) : Color.primary.opacity(0.07))
                 )
-            if !message.isUser { Spacer(minLength: 28) }
+            if !message.isUser {
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(message.text, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Copy")
+                Spacer(minLength: 10)
+            }
         }
     }
 
     private var thinkingRow: some View {
         HStack(spacing: 6) {
             ProgressView().controlSize(.small).scaleEffect(0.7)
-            Text("Thinking…").font(.system(size: 11)).foregroundStyle(.tertiary)
+            Text(model.isGenerating ? "Writing…" : "Thinking…")
+                .font(.system(size: 11)).foregroundStyle(.tertiary)
             Spacer()
         }
         .padding(.leading, 2)

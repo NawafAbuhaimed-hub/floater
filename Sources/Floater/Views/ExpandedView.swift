@@ -171,6 +171,24 @@ struct ExpandedView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Spacer()
+            Menu {
+                ForEach([1, 7, 14, 30], id: \.self) { days in
+                    Button("Last \(days) day\(days == 1 ? "" : "s")") {
+                        model.tab = .chat
+                        Task { await model.generateDigest(days: days) }
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "text.badge.checkmark").font(.system(size: 9))
+                    Text("What I did").font(.system(size: 11))
+                }
+                .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .disabled(model.isGenerating)
             if model.doneCount > 0 {
                 Button("Clear done") { model.clearCompleted() }
                     .buttonStyle(.plain)
@@ -281,6 +299,11 @@ struct TaskRow: View {
             }
             Divider()
             Button("Copy task") { copyTask() }
+            Button("Write a Claude Code prompt") {
+                model.tab = .chat
+                Task { await model.generateClaudeCodePrompt(for: task) }
+            }
+            .disabled(model.isGenerating)
             Button(isNoteOpen ? "Hide note" : "Add note") { model.toggleNote(for: task) }
             Button("Delete", role: .destructive) { model.delete(task) }
         }
@@ -418,6 +441,18 @@ struct TaskRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Copy task (\u{2318}C)")
+                Button {
+                    model.tab = .chat
+                    Task { await model.generateClaudeCodePrompt(for: task) }
+                } label: {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 18)
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isGenerating)
+                .help("Write a Claude Code prompt for this task")
             }
             StatusPicker(current: task.status) { model.setStatus($0, for: task) }
             CategoryPicker(task: task)

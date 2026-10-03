@@ -56,6 +56,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         ))
         menu.addItem(item("Open Task List", #selector(openList)))
         menu.addItem(item("Open Chat", #selector(openChat)))
+        menu.addItem(item("What I Did This Week", #selector(weeklyDigest)))
         menu.addItem(item("Collapse to Pill", #selector(collapsePanel)))
         menu.addItem(item("Reset Panel Size & Position", #selector(resetPanel)))
         menu.addItem(.separator())
@@ -176,6 +177,13 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         Task { @MainActor in
             self.targetCache[destination] = await self.model.availableTargets(for: destination)
         }
+    }
+
+    @objc private func weeklyDigest() {
+        if !panel.isVisible { panel.show() }
+        model.tab = .chat
+        model.mode = .expanded
+        Task { await model.generateDigest(days: 7) }
     }
 
     @objc private func collapsePanel() {

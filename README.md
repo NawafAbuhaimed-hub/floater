@@ -43,6 +43,13 @@ timers and a confetti burst when you finish something.
 - **Chat.** Describe your work in plain language (English or Arabic) and Claude
   proposes changes — new tasks, statuses, timers, notes, follow-ups. Nothing is
   applied until you press **Apply**.
+- **"What I did" digest.** Pick a window — 1, 7, 14 or 30 days — and get a
+  write-up of what you finished, how long you focused, and where the time went
+  by project. The figures come from your own records; Claude only phrases them.
+- **Claude Code prompts from a task.** Right-click a task (or the terminal
+  button in its note) and Floater writes a prompt you can paste straight into
+  Claude Code — informed by that project's `CLAUDE.md`, its design systems, its
+  last 20 commits, and your own notes about it.
 - **Resizable.** Drag the grip in the bottom-right corner. The pill and the
   expanded panel remember their own sizes.
 - **Remembers everything.** Tasks, focus time per task, and session history are
@@ -65,7 +72,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 157 tests
+swift test        # 173 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -141,7 +148,7 @@ Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
 Resources/Sounds/done Played when a task is finished
 Resources/Sounds/more Played when more time is added to a task
-Tests/FloaterCoreTests  157 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  173 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

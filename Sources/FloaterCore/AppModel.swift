@@ -61,6 +61,10 @@ public final class AppModel: ObservableObject {
     @Published public private(set) var isSendingChat = false
     @Published public private(set) var hasAPIKey = false
     @Published public var chatDraft: String = ""
+    @Published public private(set) var isGenerating = false
+    /// Last generated digest or prompt, also placed on the clipboard by the app.
+    @Published public private(set) var lastGenerated: String?
+    public var digestDays: Int = 7
     @Published public var mode: Mode = .collapsed
     @Published public var tab: Tab = .tasks
     /// The task whose note is open inline, if any.
@@ -95,6 +99,8 @@ public final class AppModel: ObservableObject {
     /// Writes to Calendar / Reminders. Injected by the app layer; nil in tests
     /// that do not exercise follow-ups.
     public var scheduler: FollowUpScheduling?
+    /// Reads a project's conventions and history off disk for the prompt generator.
+    public var projectContext: ProjectContextReading?
 
     public let timerLengths = [15, 30, 45]
 
@@ -566,6 +572,100 @@ public final class AppModel: ObservableObject {
         guard !eventID.isEmpty, let scheduler else { return }
         store.setCompletionEventID("", forTaskWith: task.id)
         Task { try? await scheduler.remove(id: eventID, destination: .calendar) }
+    }
+
+    // MARK: - Digest and prompt generation
+
+    public func digest(days: Int) -> Digest {
+        store.digest(days: days, now: clock.now, calendar: calendar)
+    }
+
+    private static let digestSystem = """
+    You write a short end-of-period summary of what someone got done, from a \
+    fact sheet. Rules:
+    - Use only what is in the fact sheet. Never invent a task, a number or a project.
+    - Lead with the headline: how much was finished and where the time went.
+    - Group by project when there is more than one.
+    - Two short paragraphs or a tight bullet list. No preamble, no sign-off.
+    - Plain and factual. Do not praise the person.
+    - If nothing was finished, say so in one line rather than padding.
+    """
+
+    /// Writes up the period from real figures. Claude phrases it; the numbers
+    /// come from the store.
+    public func generateDigest(days: Int) async {
+        guard !isGenerating else { return }
+        prepareChat()
+        guard let chat else {
+            chatError = ClaudeError.missingAPIKey.message
+            return
+        }
+        digestDays = days
+        isGenerating = true
+        chatError = nil
+        defer { isGenerating = false }
+
+        let facts = digest(days: days).factSheet(calendar: calendar)
+        store.appendChat(role: "user", text: "What did I do in the last \(days) days?", at: clock.now)
+        refresh()
+        do {
+            let text = try await chat.oneOff(system: Self.digestSystem, user: facts)
+            store.appendChat(role: "assistant", text: text, at: clock.now)
+            lastGenerated = text
+            refresh()
+        } catch let error as ClaudeError {
+            chatError = error.message
+        } catch {
+            chatError = error.localizedDescription
+        }
+    }
+
+    /// Turns a task into a prompt for Claude Code, informed by its project.
+    public func generateClaudeCodePrompt(for task: TaskItem) async {
+        guard !isGenerating else { return }
+        prepareChat()
+        guard let chat else {
+            chatError = ClaudeError.missingAPIKey.message
+            return
+        }
+        isGenerating = true
+        chatError = nil
+        defer { isGenerating = false }
+
+        let categoryName = category(of: task)?.name
+        let repoPath = category(of: task)?.repoPath ?? ""
+        var context = ProjectContext.empty
+        if !repoPath.isEmpty, let reader = projectContext {
+            context = await reader.context(
+                forRepoAt: repoPath,
+                projectName: categoryName ?? "",
+                matching: PromptBuilder.keywords(for: task, categoryName: categoryName)
+            )
+        }
+
+        var dueDescription: String?
+        if let due = task.dueDate {
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.timeZone = calendar.timeZone
+            formatter.dateFormat = "EEE d MMM"
+            dueDescription = formatter.string(from: due)
+        }
+
+        let brief = PromptBuilder.brief(task: task, categoryName: categoryName,
+                                        dueDescription: dueDescription, context: context)
+        store.appendChat(role: "user", text: "Write a Claude Code prompt for: \(task.title)", at: clock.now)
+        refresh()
+        do {
+            let text = try await chat.oneOff(system: PromptBuilder.system, user: brief, maxTokens: 2048)
+            store.appendChat(role: "assistant", text: text, at: clock.now)
+            lastGenerated = text
+            refresh()
+        } catch let error as ClaudeError {
+            chatError = error.message
+        } catch {
+            chatError = error.localizedDescription
+        }
     }
 
     // MARK: - Follow-ups
