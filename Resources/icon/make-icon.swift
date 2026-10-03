@@ -20,9 +20,14 @@ func draw() -> NSBitmapImageRep {
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     let ctx = NSGraphicsContext.current!.cgContext
 
-    // Tile
-    let tile = NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size),
-                            xRadius: size * 0.225, yRadius: size * 0.225)
+    // Tile. macOS wants rounded corners with transparency outside them; Slack
+    // and the like apply their own rounding, so a transparent corner there
+    // composites as white. `--square` fills the canvas edge to edge instead.
+    let squareEdges = CommandLine.arguments.contains("--square")
+    let tile = squareEdges
+        ? NSBezierPath(rect: NSRect(x: 0, y: 0, width: size, height: size))
+        : NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size),
+                       xRadius: size * 0.225, yRadius: size * 0.225)
     tile.addClip()
     let bg = NSGradient(colors: [
         NSColor(calibratedRed: 0.13, green: 0.13, blue: 0.14, alpha: 1),
