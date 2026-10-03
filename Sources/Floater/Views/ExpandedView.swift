@@ -22,6 +22,7 @@ struct ExpandedView: View {
                 footer
             case .pipeline:
                 BoardView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .notes:
                 notesPane
             case .chat:
@@ -29,6 +30,7 @@ struct ExpandedView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
         .background(GlassBackground(cornerRadius: Theme.corner))
         .overlay(alignment: .bottomTrailing) {
             ResizeGrip().padding(5)

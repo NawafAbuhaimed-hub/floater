@@ -11,6 +11,10 @@ struct BoardView: View {
         VStack(spacing: 0) {
             modeRow
             Divider().opacity(0.4)
+            // Both axes are pinned to the available space. Without the explicit
+            // maxHeight the columns' intrinsic height drove the enclosing stack
+            // taller than the window and pushed the header off the top, leaving
+            // no way back out of the board.
             ScrollView(.horizontal, showsIndicators: true) {
                 HStack(alignment: .top, spacing: 8) {
                     if model.pipelineByCategory {
@@ -34,8 +38,12 @@ struct BoardView: View {
                     }
                 }
                 .padding(10)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
     }
 
     private var modeRow: some View {
@@ -89,20 +97,27 @@ private struct BoardColumn: View {
             }
             .padding(.horizontal, 2)
 
-            ForEach(tasks, id: \.id) { task in
-                BoardCard(task: task)
-                    .draggable(task.id.uuidString)
+            // Each column scrolls on its own, so a long column cannot stretch
+            // the board.
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(spacing: 6) {
+                    ForEach(tasks, id: \.id) { task in
+                        BoardCard(task: task)
+                            .draggable(task.id.uuidString)
+                    }
+                    if tasks.isEmpty {
+                        Text("—")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.quaternary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 10)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if tasks.isEmpty {
-                Text("—")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.quaternary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 10)
-            }
-            Spacer(minLength: 0)
         }
         .frame(width: 168)
+        .frame(maxHeight: .infinity, alignment: .top)
         .padding(7)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)

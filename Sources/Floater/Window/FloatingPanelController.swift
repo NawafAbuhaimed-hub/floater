@@ -74,6 +74,16 @@ final class FloatingPanelController {
 
     func show() { panel.orderFrontRegardless() }
 
+    /// Forgets a saved size and position and puts the pill back somewhere
+    /// obviously reachable.
+    func resetGeometry() {
+        prefs.collapsedSize = nil
+        prefs.expandedSize = nil
+        prefs.panelOrigin = nil
+        placeAtSavedOrDefaultOrigin(size: Self.defaultCollapsed)
+        panel.invalidateShadow()
+    }
+
     func toggleVisibility() {
         if panel.isVisible { panel.orderOut(nil) } else { show() }
     }

@@ -56,6 +56,8 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         ))
         menu.addItem(item("Open Task List", #selector(openList)))
         menu.addItem(item("Open Chat", #selector(openChat)))
+        menu.addItem(item("Collapse to Pill", #selector(collapsePanel)))
+        menu.addItem(item("Reset Panel Size & Position", #selector(resetPanel)))
         menu.addItem(.separator())
 
         let sound = item("Sound", #selector(toggleSound))
@@ -174,6 +176,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         Task { @MainActor in
             self.targetCache[destination] = await self.model.availableTargets(for: destination)
         }
+    }
+
+    @objc private func collapsePanel() {
+        model.mode = .collapsed
+        if !panel.isVisible { panel.show() }
+    }
+
+    /// A way back when the panel has ended up a size or place that cannot be
+    /// clicked out of.
+    @objc private func resetPanel() {
+        model.tab = .tasks
+        model.mode = .collapsed
+        panel.resetGeometry()
+        if !panel.isVisible { panel.show() }
     }
 
     @objc private func toggleLogging() { model.logCompletions.toggle() }
