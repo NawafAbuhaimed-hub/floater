@@ -17,6 +17,14 @@ timers and a confetti burst when you finish something.
 - **Confetti on completion.** Ticking a task off bursts confetti across the
   screen and plays the next sound in a rotation, so you don't hear the same one
   twice in a row.
+- **Categories are projects.** Each carries the repo it maps to, so a task's
+  category is what tells the chat which codebase it concerns. Seeded with your
+  real projects on first run.
+- **Due dates**, amber on the day and red once late. A finished task is never
+  late. Overdue count shows on the pill when nothing is running.
+- **Board tab** — a pipeline whose columns switch between status and category.
+  Drag a card between columns to move it.
+- **Sort** the list by status, due date, or your own order.
 - **Two sound sets**, each rotating independently: `done/` when you finish a
   task, `more/` when you buy yourself more time on one. Drop an mp3 into
   `Resources/Sounds/<set>` and it joins that rotation — no code change.
@@ -57,7 +65,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 149 tests
+swift test        # 157 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -133,7 +141,7 @@ Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
 Resources/Sounds/done Played when a task is finished
 Resources/Sounds/more Played when more time is added to a task
-Tests/FloaterCoreTests  149 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  157 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

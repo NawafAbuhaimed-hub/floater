@@ -355,3 +355,170 @@ final class ChatProposalTests: XCTestCase {
         XCTAssertTrue(model.pendingActions.isEmpty)
     }
 }
+
+@MainActor
+final class ChatCategoryAndDueTests: XCTestCase {
+    private var clock: TestClock!
+    private var store: Store!
+    private var model: AppModel!
+    private var client: FakeClaudeClient!
+    private var calendar: Calendar!
+
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        clock = TestClock(now: Date(timeIntervalSince1970: 1_773_153_120)) // 2026-03-10 London
+        store = try Store(inMemory: true)
+        client = FakeClaudeClient()
+        calendar = {
+            var cal = Calendar(identifier: .gregorian)
+            cal.timeZone = TimeZone(identifier: "Europe/London")!
+            return cal
+        }()
+        let fake = client!
+        let cal = calendar!
+        let tick = clock!
+        model = AppModel(
+            store: store, prefs: Preferences(store: InMemoryStore()), clock: clock,
+            calendar: cal, keyStore: InMemoryAPIKeyStore(value: "sk-test"),
+            makeChatEngine: { _ in ChatEngine(client: fake, clock: tick, calendar: cal) },
+            autoTick: false
+        )
+        model.logCompletions = false
+    }
+
+    private func send(_ text: String) async {
+        model.chatDraft = text
+        await model.sendChat()
+    }
+
+    private func addTask(_ title: String) -> TaskItem {
+        model.draft = title
+        model.addDraftTask()
+        return model.tasks.first { $0.title == title }!
+    }
+
+    private func reread(_ task: TaskItem) -> TaskItem { model.tasks.first { $0.id == task.id }! }
+
+    func testTheSnapshotListsCategoriesSoTheModelCanUseTheirNames() async {
+        _ = addTask("Something")
+        await send("what categories do I have?")
+        let system = client.requests.last?.system ?? ""
+        XCTAssertTrue(system.contains("Categories"), system)
+        XCTAssertTrue(system.contains("MNZIL CRM"), "the seeded projects must be offered by name")
+    }
+
+    func testItCanPutATaskInACategory() async {
+        let task = addTask("Fix the lost reason tree")
+        client.queued = [.success(response(tools: [
+            ("set_category", ["task_id": .string("t1"), "category": .string("MNZIL CRM")]),
+        ]))]
+        await send("that one is MNZIL CRM")
+        XCTAssertEqual(model.pendingActions.count, 1)
+
+        await model.applyProposals()
+
+        let category = model.category(of: reread(task))
+        XCTAssertEqual(category?.name, "MNZIL CRM")
+        XCTAssertEqual(category?.repoPath.hasSuffix("/mnzilpostsales"), true,
+                       "the category is what later tells the prompt generator which repo to read")
+    }
+
+    func testAnUnknownCategoryIsDroppedRatherThanInvented() async {
+        _ = addTask("Something")
+        client.queued = [.success(response(tools: [
+            ("set_category", ["task_id": .string("t1"), "category": .string("Nonexistent")]),
+        ]))]
+        await send("put it in Nonexistent")
+        XCTAssertTrue(model.pendingActions.isEmpty)
+    }
+
+    func testClearingACategoryIsAllowed() async {
+        let task = addTask("Categorised")
+        model.setCategory(model.categories.first, for: task)
+        client.queued = [.success(response(tools: [
+            ("set_category", ["task_id": .string("t1"), "category": .string("")]),
+        ]))]
+        await send("take it out of that project")
+        await model.applyProposals()
+        XCTAssertNil(reread(task).categoryID)
+    }
+
+    func testItCanSetADueDate() async {
+        let task = addTask("Ship it")
+        client.queued = [.success(response(tools: [
+            ("set_due_date", ["task_id": .string("t1"), "due": .string("2026-03-20")]),
+        ]))]
+        await send("due on the 20th")
+        await model.applyProposals()
+
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        XCTAssertEqual(reread(task).dueDate.map { formatter.string(from: $0) }, "2026-03-20")
+    }
+
+    func testItCanClearADueDate() async {
+        let task = addTask("No longer urgent")
+        model.setDueDate(Date(), for: task)
+        client.queued = [.success(response(tools: [
+            ("set_due_date", ["task_id": .string("t1"), "due": .string("")]),
+        ]))]
+        await send("drop the deadline")
+        await model.applyProposals()
+        XCTAssertNil(reread(task).dueDate)
+    }
+
+    func testAnUnparseableDueDateIsDropped() async {
+        _ = addTask("Vague")
+        client.queued = [.success(response(tools: [
+            ("set_due_date", ["task_id": .string("t1"), "due": .string("sometime soon")]),
+        ]))]
+        await send("due sometime soon")
+        XCTAssertTrue(model.pendingActions.isEmpty)
+    }
+}
+
+@MainActor
+final class ChatCreateWithCategoryTests: XCTestCase {
+    func testCreatingATaskCanSetItsCategoryAndDueDateInOneGo() async throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/London")!
+        let clock = TestClock(now: Date(timeIntervalSince1970: 1_773_153_120))
+        let store = try Store(inMemory: true)
+        let client = FakeClaudeClient()
+        let model = AppModel(
+            store: store, prefs: Preferences(store: InMemoryStore()), clock: clock,
+            calendar: calendar, keyStore: InMemoryAPIKeyStore(value: "sk-test"),
+            makeChatEngine: { _ in ChatEngine(client: client, clock: clock, calendar: calendar) },
+            autoTick: false
+        )
+        model.logCompletions = false
+
+        client.queued = [.success(response(tools: [
+            ("create_task", [
+                "ref": .string("new-1"),
+                "title": .string("Fix the qualifier filter"),
+                "note": .string(""),
+                "status": .string("notStarted"),
+                "category": .string("MNZIL CRM"),
+                "due": .string("2026-03-18"),
+            ]),
+        ]))]
+        model.chatDraft = "add: fix the qualifier filter for MNZIL CRM, due the 18th"
+        await model.sendChat()
+
+        XCTAssertEqual(model.pendingActions.count, 1)
+        XCTAssertTrue(model.pendingActions[0].summary.contains("MNZIL CRM"), model.pendingActions[0].summary)
+
+        await model.applyProposals()
+
+        let task = model.tasks.first { $0.title == "Fix the qualifier filter" }!
+        XCTAssertEqual(model.category(of: task)?.name, "MNZIL CRM")
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        XCTAssertEqual(task.dueDate.map { formatter.string(from: $0) }, "2026-03-18")
+    }
+}

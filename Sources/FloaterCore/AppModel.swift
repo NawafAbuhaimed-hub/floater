@@ -419,7 +419,7 @@ public final class AppModel: ObservableObject {
         isSendingChat = true
         defer { isSendingChat = false }
         do {
-            let turn = try await chat.send(text, tasks: tasks)
+            let turn = try await chat.send(text, tasks: tasks, categories: categories)
             store.appendChat(role: "assistant", text: turn.reply, at: clock.now)
             pendingActions = turn.actions
             refresh()
@@ -453,10 +453,12 @@ public final class AppModel: ObservableObject {
 
         for proposal in actions {
             switch proposal.action {
-            case .createTask(let ref, let title, let note, let status):
+            case .createTask(let ref, let title, let note, let status, let categoryID, let due):
                 guard let task = store.add(title: title) else { continue }
                 created[ref] = task.id
                 if !note.isEmpty { store.updateNote(note, forTaskWith: task.id) }
+                if let categoryID { store.setCategory(categoryID, forTaskWith: task.id) }
+                if let due { store.setDueDate(due, forTaskWith: task.id) }
                 if status != .notStarted { store.setStatus(status, for: task, at: clock.now) }
             case .setStatus(let ref, let status):
                 guard let task = resolve(ref) else { continue }
@@ -467,6 +469,12 @@ public final class AppModel: ObservableObject {
             case .addNote(let ref, let note):
                 guard let task = resolve(ref) else { continue }
                 store.updateNote(note, forTaskWith: task.id)
+            case .setCategory(let ref, let categoryID, _):
+                guard let task = resolve(ref) else { continue }
+                store.setCategory(categoryID, forTaskWith: task.id)
+            case .setDueDate(let ref, let date):
+                guard let task = resolve(ref) else { continue }
+                store.setDueDate(date, forTaskWith: task.id)
             case .deleteTask(let ref):
                 guard let task = resolve(ref) else { continue }
                 delete(task)

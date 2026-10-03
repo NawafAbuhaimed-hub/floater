@@ -8,7 +8,10 @@ public enum TaskRef: Equatable, Sendable {
 }
 
 public enum ChatAction: Equatable, Sendable {
-    case createTask(ref: String, title: String, note: String, status: TaskStatus)
+    case createTask(ref: String, title: String, note: String, status: TaskStatus,
+                    categoryID: UUID?, due: Date?)
+    case setCategory(TaskRef, categoryID: UUID?, categoryName: String)
+    case setDueDate(TaskRef, date: Date?)
     case setStatus(TaskRef, TaskStatus)
     case startTimer(TaskRef, minutes: Int)
     case addNote(TaskRef, note: String)
@@ -54,6 +57,8 @@ public final class ChatEngine {
     private var history: [APIMessage] = []
     /// Short handles ("t1") the model uses instead of raw UUIDs.
     private var handles: [String: UUID] = [:]
+    /// Category names the model may use, matched case-insensitively.
+    private var categoryIDs: [String: UUID] = [:]
 
     public init(
         client: ClaudeClient,
@@ -79,8 +84,12 @@ public final class ChatEngine {
         }
     }
 
-    public func send(_ text: String, tasks: [TaskItem]) async throws -> ChatTurn {
+    public func send(_ text: String, tasks: [TaskItem], categories: [TaskCategory] = []) async throws -> ChatTurn {
         buildHandles(for: tasks)
+        categoryIDs = Dictionary(
+            categories.map { ($0.name.lowercased(), $0.id) }, uniquingKeysWith: { first, _ in first }
+        )
+        self.categories = categories
         history.append(.user(text))
         if history.count > Self.maxHistoryTurns {
             history.removeFirst(history.count - Self.maxHistoryTurns)
@@ -90,7 +99,7 @@ public final class ChatEngine {
             MessagesRequest(
                 model: model,
                 maxTokens: 4096,
-                system: systemPrompt(tasks: tasks),
+                system: systemPrompt(tasks: tasks, categories: categories),
                 messages: history,
                 tools: Self.tools
             )
@@ -122,7 +131,9 @@ public final class ChatEngine {
         }
     }
 
-    private func systemPrompt(tasks: [TaskItem]) -> String {
+    private var categories: [TaskCategory] = []
+
+    private func systemPrompt(tasks: [TaskItem], categories: [TaskCategory]) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = calendar.timeZone
         formatter.formatOptions = [.withInternetDateTime]
@@ -144,6 +155,11 @@ public final class ChatEngine {
             "",
         ]
 
+        if !categories.isEmpty {
+            lines.append("Categories (a task belongs to at most one): "
+                         + categories.map(\.name).joined(separator: ", "))
+            lines.append("")
+        }
         if tasks.isEmpty {
             lines.append("The task list is empty.")
         } else {
@@ -151,6 +167,15 @@ public final class ChatEngine {
             for (index, task) in tasks.enumerated() {
                 var line = "t\(index + 1) [\(task.status.rawValue)] \(task.title)"
                 if task.secondsSpent > 0 { line += " (\(task.secondsSpent.compactDuration) focused)" }
+                if let due = task.dueDate {
+                    let formatter = ISO8601DateFormatter()
+                    formatter.timeZone = calendar.timeZone
+                    formatter.formatOptions = [.withFullDate]
+                    line += " due:\(formatter.string(from: due))"
+                }
+                if let category = categories.first(where: { $0.id == task.categoryID }) {
+                    line += " [\(category.name)]"
+                }
                 if !task.note.isEmpty { line += " — note: \(task.note.prefix(160))" }
                 lines.append(line)
             }
@@ -200,6 +225,8 @@ public final class ChatEngine {
                 "title": string("Short imperative title."),
                 "note": string("Extra detail worth keeping. Empty string if there is none."),
                 "status": statusProperty,
+                "category": string("Category name exactly as listed, or empty string for none."),
+                "due": string("Due date, ISO 8601, or empty string for none."),
             ])
         ),
         ToolDefinition(
@@ -227,6 +254,22 @@ public final class ChatEngine {
             name: "delete_task",
             description: "Propose deleting a task. Only when the user clearly wants it gone.",
             inputSchema: schema(["task_id": taskIDProperty])
+        ),
+        ToolDefinition(
+            name: "set_category",
+            description: "Propose putting a task in a category. Pass an empty name to clear it.",
+            inputSchema: schema([
+                "task_id": taskIDProperty,
+                "category": string("Category name exactly as listed, or empty string to clear."),
+            ])
+        ),
+        ToolDefinition(
+            name: "set_due_date",
+            description: "Propose a task's due date. Pass an empty string to clear it.",
+            inputSchema: schema([
+                "task_id": taskIDProperty,
+                "due": string("Local date, or date and time, ISO 8601 (2026-10-09 or 2026-10-09T17:00). Empty to clear."),
+            ])
         ),
         ToolDefinition(
             name: "schedule_follow_up",
@@ -283,12 +326,58 @@ public final class ChatEngine {
             let reference = input["ref"]?.stringValue ?? "new-\(pendingTitles.count + 1)"
             let note = input["note"]?.stringValue ?? ""
             let status = TaskStatus(rawValue: input["status"]?.stringValue ?? "") ?? .notStarted
+            let categoryName = input["category"]?.stringValue ?? ""
+            let categoryID = categoryIDs[categoryName.lowercased()]
+            let due = (input["due"]?.stringValue).flatMap { $0.isEmpty ? nil : Self.parseDate($0, calendar: calendar) }
             pendingTitles[reference] = title
             var summary = "Add \u{201C}\(title)\u{201D}"
             if status != .notStarted { summary += " as \(status.title)" }
+            if categoryID != nil { summary += " in \(categoryName)" }
+            if due != nil {
+                let formatter = DateFormatter()
+                formatter.calendar = calendar
+                formatter.timeZone = calendar.timeZone
+                formatter.dateFormat = "EEE d MMM"
+                summary += ", due \(formatter.string(from: due!))"
+            }
             return ProposedAction(
-                action: .createTask(ref: reference, title: title, note: note, status: status),
+                action: .createTask(ref: reference, title: title, note: note, status: status,
+                                    categoryID: categoryID, due: due),
                 summary: summary, symbol: "plus.circle", isDestructive: false
+            )
+
+        case "set_category":
+            guard let target = ref() else { return nil }
+            let name = input["category"]?.stringValue ?? ""
+            let id = categoryIDs[name.lowercased()]
+            guard name.isEmpty || id != nil else { return nil }
+            return ProposedAction(
+                action: .setCategory(target, categoryID: id, categoryName: name),
+                summary: name.isEmpty
+                    ? "Remove \u{201C}\(label(target))\u{201D} from its category"
+                    : "Put \u{201C}\(label(target))\u{201D} in \(name)",
+                symbol: "folder", isDestructive: false
+            )
+
+        case "set_due_date":
+            guard let target = ref() else { return nil }
+            let raw = input["due"]?.stringValue ?? ""
+            if raw.isEmpty {
+                return ProposedAction(
+                    action: .setDueDate(target, date: nil),
+                    summary: "Clear the due date on \u{201C}\(label(target))\u{201D}",
+                    symbol: "calendar.badge.minus", isDestructive: false
+                )
+            }
+            guard let date = Self.parseDate(raw, calendar: calendar) else { return nil }
+            let formatter = DateFormatter()
+            formatter.calendar = calendar
+            formatter.timeZone = calendar.timeZone
+            formatter.dateFormat = "EEE d MMM"
+            return ProposedAction(
+                action: .setDueDate(target, date: date),
+                summary: "Due \(formatter.string(from: date)) — \u{201C}\(label(target))\u{201D}",
+                symbol: "calendar", isDestructive: false
             )
 
         case "set_task_status":
