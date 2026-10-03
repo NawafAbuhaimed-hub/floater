@@ -305,7 +305,18 @@ would actually break on; and the Slack status is assembled clause by clause and
 stops before Slack's 100-character cut, rather than being truncated mid-word.
 
 Slack is off until the user turns it on, and turning it off clears the status
-Floater set rather than leaving a stale one behind. The weekly write-up is given
+Floater set rather than leaving a stale one behind.
+
+**The status is a joke, not a scoreboard.** It carries no task count, no level
+and no goal progress — the only number it may ever show is the streak's day
+count, and a test asserts exactly that across every state and every hour of the
+day. It also has no parameter for the task title, so what the user is working on
+— client names included — cannot reach the workspace even by accident. One joke
+had to be reworded to keep the "no numbers" rule mechanically checkable; a rule
+a test can enforce is worth more than one funny line.
+
+Lines are chosen by day and hour, so the status has variety without Floater
+writing to Slack on every tick. The weekly write-up is given
 the same fact sheet as the digest, with the same instruction to invent nothing.
 
 **The resize grip measured the drag in its own coordinate space.** The grip

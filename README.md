@@ -54,10 +54,11 @@ timers and a confetti burst when you finish something.
   time actually focused on it. A streak counts consecutive days with something
   finished, and survives a day that has not finished yet. A daily goal ring
   tracks tasks or minutes. Ten badges unlock as you go.
-- **Slack status**, off until you turn it on in the menu bar. It appears the
-  moment you switch it on, refreshes as the day goes, and shows your streak,
-  level and progress toward the day's goal, next to your name. Turning it off
-  clears it. **Post My Week to Slack** has Claude write up your week from the
+- **Slack status**, off until you turn it on in the menu bar. It is a joke, not
+  a scoreboard: "heads down, do not perceive me" while a timer runs, "touching
+  grass (metaphorically)" when none is, and "day 12 of pretending I have it
+  together" once you are on a streak. No task counts, no level, and never the
+  name of what you are working on. Turning it off clears it. **Post My Week to Slack** has Claude write up your week from the
   real figures and posts it, signed by Floater AI.
 - **Resizable.** Drag the grip in the bottom-right corner. The pill and the
   expanded panel remember their own sizes.
@@ -81,7 +82,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 206 tests
+swift test        # 211 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -157,7 +158,7 @@ Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
 Resources/Sounds/done Played when a task is finished
 Resources/Sounds/more Played when more time is added to a task
-Tests/FloaterCoreTests  206 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  211 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

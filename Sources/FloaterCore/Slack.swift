@@ -22,36 +22,75 @@ public protocol SlackPosting: AnyObject, Sendable {
 }
 
 public enum SlackStatus {
-    /// Slack truncates a status at 100 characters, so this builds from the most
-    /// useful part outward and stops before it would be cut.
+    /// Slack cuts a status at 100 characters.
     public static let limit = 100
 
-    public static func text(for stats: GameStats) -> String {
-        var parts: [String] = []
-        if stats.streakDays > 0 { parts.append("\(stats.streakDays)d streak") }
-        parts.append("Lv \(stats.level)")
-        if stats.goalTarget > 0 {
-            parts.append(stats.goalKind == .tasks
-                         ? "\(stats.goalDone)/\(stats.goalTarget) done"
-                         : "\(stats.goalDone)/\(stats.goalTarget) min")
-        }
-        if stats.focusedTodaySeconds >= 60 {
-            parts.append("\(stats.focusedTodaySeconds.compactDuration) focused")
-        }
+    /// Deliberately no task counts and no task titles. Counts turn a status
+    /// into a scoreboard, and titles would put whatever the user is working on
+    /// — client names included — in front of the whole workspace.
+    static let focusing = [
+        "heads down, do not perceive me",
+        "in the zone. send snacks",
+        "focusing. aggressively.",
+        "brain fully charged, body on fumes",
+        "locked in 🔒",
+        "currently outsmarting my own to-do list",
+        "deep work or a convincing impression of it",
+        "timer running, excuses paused",
+    ]
 
-        var text = ""
-        for part in parts {
-            let candidate = text.isEmpty ? part : text + " · " + part
-            if candidate.count > limit { break }
-            text = candidate
-        }
-        return text
+    static let onAStreak = [
+        "day %d of pretending I have it together",
+        "%d days straight. unstoppable. ish.",
+        "on a %d-day heater",
+        "streak: %d. ego: unmanageable.",
+        "%d days in a row. someone stop me.",
+    ]
+
+    static let idle = [
+        "technically working",
+        "between tasks, emotionally",
+        "looking busy",
+        "my to-do list and I are not speaking",
+        "touching grass (metaphorically)",
+        "rebooting the human",
+        "in the gap between two good ideas",
+    ]
+
+    /// Changes at most once an hour, so the status has variety without Floater
+    /// writing to Slack every tick.
+    static func seed(at date: Date, calendar: Calendar) -> Int {
+        let day = calendar.ordinality(of: .day, in: .year, for: date) ?? 0
+        let hour = calendar.component(.hour, from: date)
+        return day * 24 + hour
     }
 
-    public static func emoji(for stats: GameStats) -> String {
+    public static func text(
+        for stats: GameStats,
+        focusing: Bool,
+        at date: Date,
+        calendar: Calendar = .current
+    ) -> String {
+        let index = seed(at: date, calendar: calendar)
+        let line: String
+        if focusing {
+            line = focusing_(index)
+        } else if stats.streakDays >= 3 {
+            line = String(format: onAStreak[index % onAStreak.count], stats.streakDays)
+        } else {
+            line = idle[index % idle.count]
+        }
+        return String(line.prefix(limit))
+    }
+
+    private static func focusing_(_ index: Int) -> String {
+        focusing[index % focusing.count]
+    }
+
+    public static func emoji(for stats: GameStats, focusing: Bool) -> String {
+        if focusing { return ":hourglass_flowing_sand:" }
         if stats.streakDays >= 7 { return ":fire:" }
-        if stats.goalMet { return ":white_check_mark:" }
-        if stats.focusedTodaySeconds > 0 { return ":hourglass_flowing_sand:" }
-        return ":dart:"
+        if stats.streakDays >= 3 { return ":zap:" }
+        return ":coffee:"
     }
 }

@@ -143,44 +143,103 @@ final class GamificationRuleTests: XCTestCase {
 }
 
 final class SlackStatusTests: XCTestCase {
-    private func stats(streak: Int = 0, level: Int = 1, done: Int = 0, target: Int = 5,
-                       focused: Double = 0) -> GameStats {
-        GameStats(totalXP: 0, level: level, xpIntoLevel: 0, xpNeededForLevel: 100,
-                  streakDays: streak, completedToday: done, focusedTodaySeconds: focused,
+    private var calendar: Calendar = {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Europe/London")!
+        return cal
+    }()
+
+    private func date(_ string: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter.date(from: string)!
+    }
+
+    private func stats(streak: Int = 0, done: Int = 3, target: Int = 5) -> GameStats {
+        GameStats(totalXP: 400, level: 3, xpIntoLevel: 50, xpNeededForLevel: 200,
+                  streakDays: streak, completedToday: done, focusedTodaySeconds: 3600,
                   goalKind: .tasks, goalTarget: target, badges: [])
     }
 
-    func testTheStatusLeadsWithTheStreakWhenThereIsOne() {
-        let text = SlackStatus.text(for: stats(streak: 12, level: 7, done: 3))
-        XCTAssertTrue(text.hasPrefix("12d streak"), text)
-        XCTAssertTrue(text.contains("Lv 7"), text)
-        XCTAssertTrue(text.contains("3/5 done"), text)
+    /// The only number allowed anywhere is the streak's day count. No task
+    /// totals, no level, no goal progress — a status is not a scoreboard.
+    func testTheOnlyNumberEverShownIsTheStreak() {
+        let moments = (0..<48).map { date("2026-03-10 00:00").addingTimeInterval(Double($0) * 3600) }
+        for focusing in [true, false] {
+            for streak in [0, 2, 3, 12] {
+                for moment in moments {
+                    let text = SlackStatus.text(for: stats(streak: streak), focusing: focusing,
+                                                at: moment, calendar: calendar)
+                    let digits = text.filter(\.isNumber)
+                    let onStreakLine = !focusing && streak >= 3
+                    XCTAssertEqual(digits, onStreakLine ? String(streak) : "",
+                                   "unexpected number in: \(text)")
+                    XCTAssertFalse(text.contains("/"), text)
+                    XCTAssertFalse(text.contains("Lv"), text)
+                    XCTAssertFalse(text.lowercased().contains("xp"), text)
+                }
+            }
+        }
     }
 
-    func testNoStreakMeansNoStreakClause() {
-        let text = SlackStatus.text(for: stats(streak: 0, level: 3))
-        XCTAssertFalse(text.contains("streak"), text)
-        XCTAssertTrue(text.hasPrefix("Lv 3"), text)
+    func testAStatusNeverCarriesWhatIsBeingWorkedOn() {
+        // There is no parameter for it, which is the point: a task title cannot
+        // reach the workspace even by accident.
+        let text = SlackStatus.text(for: stats(streak: 5), focusing: true,
+                                    at: date("2026-03-10 10:00"), calendar: calendar)
+        XCTAssertFalse(text.isEmpty)
+        XCTAssertTrue(SlackStatus.focusing.contains(text), text)
     }
 
-    func testTheStatusNeverExceedsSlacksLimit() {
-        let text = SlackStatus.text(for: stats(streak: 999_999, level: 999_999,
-                                               done: 999_999, target: 999_999,
-                                               focused: 99 * 3600))
-        XCTAssertLessThanOrEqual(text.count, SlackStatus.limit)
+    func testFocusingAndIdleReadDifferently() {
+        let moment = date("2026-03-10 10:00")
+        let working = SlackStatus.text(for: stats(), focusing: true, at: moment, calendar: calendar)
+        let resting = SlackStatus.text(for: stats(), focusing: false, at: moment, calendar: calendar)
+        XCTAssertNotEqual(working, resting)
+        XCTAssertTrue(SlackStatus.focusing.contains(working))
+        XCTAssertTrue(SlackStatus.idle.contains(resting))
     }
 
-    func testItIsCutAtAWholeClauseRatherThanMidWord() {
-        let text = SlackStatus.text(for: stats(streak: 12, level: 7, done: 3, focused: 2 * 3600))
-        XCTAssertFalse(text.hasSuffix("·"), text)
-        XCTAssertFalse(text.hasSuffix(" "), text)
+    func testAStreakGetsItsOwnLineWithTheNumberOfDays() {
+        let text = SlackStatus.text(for: stats(streak: 12), focusing: false,
+                                    at: date("2026-03-10 10:00"), calendar: calendar)
+        XCTAssertTrue(text.contains("12"), text)
+        XCTAssertFalse(SlackStatus.idle.contains(text))
     }
 
-    func testTheEmojiReflectsWhatIsHappening() {
-        XCTAssertEqual(SlackStatus.emoji(for: stats(streak: 7)), ":fire:")
-        XCTAssertEqual(SlackStatus.emoji(for: stats(done: 5, target: 5)), ":white_check_mark:")
-        XCTAssertEqual(SlackStatus.emoji(for: stats(focused: 600)), ":hourglass_flowing_sand:")
-        XCTAssertEqual(SlackStatus.emoji(for: stats()), ":dart:")
+    func testAShortStreakStillReadsAsIdle() {
+        let text = SlackStatus.text(for: stats(streak: 2), focusing: false,
+                                    at: date("2026-03-10 10:00"), calendar: calendar)
+        XCTAssertTrue(SlackStatus.idle.contains(text), text)
+    }
+
+    func testTheLineIsStableWithinAnHourAndChangesAcrossHours() {
+        let early = date("2026-03-10 10:05")
+        let later = date("2026-03-10 10:55")
+        let nextHour = date("2026-03-10 11:05")
+        func line(_ moment: Date) -> String {
+            SlackStatus.text(for: stats(), focusing: false, at: moment, calendar: calendar)
+        }
+        XCTAssertEqual(line(early), line(later), "it must not churn, or Slack is written to constantly")
+        XCTAssertNotEqual(line(early), line(nextHour))
+    }
+
+    func testEveryLineFitsSlacksLimit() {
+        for line in SlackStatus.focusing + SlackStatus.idle {
+            XCTAssertLessThanOrEqual(line.count, SlackStatus.limit, line)
+        }
+        for template in SlackStatus.onAStreak {
+            XCTAssertLessThanOrEqual(String(format: template, 999).count, SlackStatus.limit, template)
+        }
+    }
+
+    func testTheEmojiFollowsTheState() {
+        XCTAssertEqual(SlackStatus.emoji(for: stats(), focusing: true), ":hourglass_flowing_sand:")
+        XCTAssertEqual(SlackStatus.emoji(for: stats(streak: 7), focusing: false), ":fire:")
+        XCTAssertEqual(SlackStatus.emoji(for: stats(streak: 3), focusing: false), ":zap:")
+        XCTAssertEqual(SlackStatus.emoji(for: stats(), focusing: false), ":coffee:")
     }
 }
 
@@ -266,15 +325,42 @@ final class SlackSyncTests: XCTestCase {
         XCTAssertEqual(model.slackError, SlackError.api("invalid_auth").message)
     }
 
-    func testFinishingATaskPushesTheNewFigures() async {
-        let before = await enableAndSettle()
-
+    func testStartingATimerSwitchesTheStatusToFocusing() async {
+        _ = await enableAndSettle()
         model.draft = "Something"
         model.addDraftTask()
+
+        model.start(model.tasks[0], minutes: 25)
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertTrue(SlackStatus.focusing.contains(slack.statuses.last?.text ?? ""),
+                      slack.statuses.last?.text ?? "")
+        XCTAssertEqual(slack.statuses.last?.emoji, ":hourglass_flowing_sand:")
+    }
+
+    func testStoppingATimerPutsItBack() async {
+        _ = await enableAndSettle()
+        model.draft = "Something"
+        model.addDraftTask()
+        model.start(model.tasks[0], minutes: 25)
+        for _ in 0..<20 { await Task.yield() }
+
+        model.stopTimer()
+        for _ in 0..<20 { await Task.yield() }
+
+        XCTAssertFalse(SlackStatus.focusing.contains(slack.statuses.last?.text ?? ""),
+                       slack.statuses.last?.text ?? "")
+    }
+
+    func testFinishingATaskDoesNotChurnTheStatus() async {
+        let before = await enableAndSettle()
+        model.draft = "Something"
+        model.addDraftTask()
+
         model.complete(model.tasks[0])
         for _ in 0..<20 { await Task.yield() }
 
-        XCTAssertGreaterThan(slack.statuses.count, before)
-        XCTAssertTrue(slack.statuses.last?.text.contains("1/5") ?? false, slack.statuses.last?.text ?? "")
+        XCTAssertEqual(slack.statuses.count, before,
+                       "the status says nothing about task counts, so finishing one changes nothing")
     }
 }

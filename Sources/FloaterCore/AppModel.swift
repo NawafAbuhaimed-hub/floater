@@ -624,11 +624,13 @@ public final class AppModel: ObservableObject {
     /// tick.
     public func syncSlackStatus(force: Bool = false) async {
         guard slackStatusEnabled, let slack, let stats else { return }
-        let text = SlackStatus.text(for: stats)
+        let text = SlackStatus.text(for: stats, focusing: isRunning,
+                                    at: clock.now, calendar: calendar)
         let stale = lastStatusPush.map { clock.now.timeIntervalSince($0) >= Self.slackRefreshInterval } ?? true
         guard force || text != lastStatusText || stale else { return }
         do {
-            try await slack.setStatus(text: text, emoji: SlackStatus.emoji(for: stats))
+            try await slack.setStatus(text: text,
+                                      emoji: SlackStatus.emoji(for: stats, focusing: isRunning))
             lastStatusText = text
             lastStatusPush = clock.now
             slackError = nil
@@ -911,6 +913,7 @@ public final class AppModel: ObservableObject {
         engine.start(taskID: task.id, title: task.title, minutes: minutes)
         mode = .collapsed
         refresh()
+        Task { await syncSlackStatus(force: true) }
     }
 
     public func togglePause() {
@@ -935,6 +938,7 @@ public final class AppModel: ObservableObject {
         _ = finishActiveRun(completedTask: false)
         onDismissTimeUp?()
         refresh()
+        Task { await syncSlackStatus(force: true) }
     }
 
     /// "Done" from the time-up takeover.
