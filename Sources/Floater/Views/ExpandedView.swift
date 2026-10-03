@@ -17,8 +17,11 @@ struct ExpandedView: View {
                 composer
                 if model.isActive { activeCard }
                 Divider().opacity(0.5)
+                sortRow
                 taskList
                 footer
+            case .pipeline:
+                BoardView()
             case .notes:
                 notesPane
             case .chat:
@@ -101,13 +104,41 @@ struct ExpandedView: View {
         .background(Color.primary.opacity(0.04))
     }
 
+    private var sortRow: some View {
+        HStack(spacing: 4) {
+            Text("Sort")
+                .font(.system(size: 10))
+                .foregroundStyle(.quaternary)
+            ForEach(TaskSort.allCases) { option in
+                let selected = model.sort == option
+                Button { model.sort = option } label: {
+                    Text(option.title)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(selected ? Color.primary : Color.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.primary.opacity(selected ? 0.12 : 0)))
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer(minLength: 0)
+            if model.overdueCount > 0 {
+                Text("\(model.overdueCount) overdue")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.color(for: .overdue))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+    }
+
     private var taskList: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 if model.tasks.isEmpty {
                     emptyState
                 }
-                ForEach(model.tasks, id: \.id) { task in
+                ForEach(model.sortedTasks, id: \.id) { task in
                     TaskRow(task: task)
                     Divider().opacity(0.25).padding(.leading, 40)
                 }
@@ -303,6 +334,15 @@ struct TaskRow: View {
                 Image(systemName: "note.text")
                     .foregroundStyle(.tertiary)
             }
+            if let category = model.category(of: task) {
+                Text("·").foregroundStyle(.quaternary)
+                Text(category.label)
+                    .foregroundStyle(Theme.color(hex: category.colorHex))
+            }
+            if task.dueDate != nil {
+                Text("·").foregroundStyle(.quaternary)
+                DueChip(task: task)
+            }
             if let followUp = model.followUp(for: task) {
                 Text("·").foregroundStyle(.quaternary)
                 Image(systemName: followUp.destination.symbol)
@@ -378,6 +418,8 @@ struct TaskRow: View {
                 .help("Copy task (\u{2318}C)")
             }
             StatusPicker(current: task.status) { model.setStatus($0, for: task) }
+            CategoryPicker(task: task)
+            DueDatePicker(task: task)
             NoteEditor(
                 text: Binding(
                     get: { task.note },
@@ -487,5 +529,86 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+
+/// Pick the project a task belongs to.
+struct CategoryPicker: View {
+    let task: TaskItem
+    @EnvironmentObject private var model: AppModel
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                chip(label: "None", tint: .secondary, selected: task.categoryID == nil) {
+                    model.setCategory(nil, for: task)
+                }
+                ForEach(model.categories, id: \.id) { category in
+                    chip(
+                        label: category.label,
+                        tint: Theme.color(hex: category.colorHex),
+                        selected: task.categoryID == category.id
+                    ) { model.setCategory(category, for: task) }
+                }
+            }
+        }
+        .frame(height: 22)
+    }
+
+    private func chip(label: String, tint: Color, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(selected ? Color.primary : Color.secondary)
+                .lineLimit(1)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(
+                    Capsule()
+                        .fill(tint.opacity(selected ? 0.22 : 0.07))
+                        .overlay(Capsule().strokeBorder(tint.opacity(selected ? 0.7 : 0), lineWidth: 1))
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Set or clear a due date.
+struct DueDatePicker: View {
+    let task: TaskItem
+    @EnvironmentObject private var model: AppModel
+    @State private var draft = Date()
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "calendar")
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+            if task.dueDate == nil {
+                Button("Add due date") {
+                    draft = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date()) ?? Date()
+                    model.setDueDate(draft, for: task)
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+            } else {
+                DatePicker("", selection: Binding(
+                    get: { task.dueDate ?? Date() },
+                    set: { model.setDueDate($0, for: task) }
+                ))
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .scaleEffect(0.85, anchor: .leading)
+                .frame(width: 150)
+                Button("Clear") { model.setDueDate(nil, for: task) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 20)
     }
 }

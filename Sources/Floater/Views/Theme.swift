@@ -15,6 +15,28 @@ enum Theme {
 
     static let accent = Color(red: 0.19, green: 0.82, blue: 0.35)
 
+    /// Category colours are stored as hex so they survive in SwiftData.
+    static func color(hex: String) -> Color {
+        var value: UInt64 = 0
+        Scanner(string: hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")))
+            .scanHexInt64(&value)
+        guard value > 0 else { return .secondary }
+        return Color(
+            red: Double((value >> 16) & 0xFF) / 255,
+            green: Double((value >> 8) & 0xFF) / 255,
+            blue: Double(value & 0xFF) / 255
+        )
+    }
+
+    static func color(for state: DueState) -> Color {
+        switch state {
+        case .none: return .secondary
+        case .upcoming: return Color(red: 0.56, green: 0.56, blue: 0.58)
+        case .today: return Color(red: 1.00, green: 0.62, blue: 0.04)
+        case .overdue: return Color(red: 1.00, green: 0.27, blue: 0.23)
+        }
+    }
+
     static func color(for status: TaskStatus) -> Color {
         switch status {
         case .notStarted: return Color(red: 0.56, green: 0.56, blue: 0.58)

@@ -17,6 +17,8 @@ public final class TaskItem {
     public var note: String = ""
     /// Calendar event logging this task's completion, so reopening can remove it.
     public var completionEventID: String = ""
+    public var dueDate: Date?
+    public var categoryID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -46,6 +48,13 @@ public final class TaskItem {
     }
 
     public var isDone: Bool { status == .done }
+
+    /// How this task's due date reads against a given moment.
+    public func dueState(now: Date, calendar: Calendar = .current) -> DueState {
+        guard let dueDate, !isDone else { return .none }
+        if calendar.isDate(dueDate, inSameDayAs: now) { return .today }
+        return dueDate < now ? .overdue : .upcoming
+    }
 }
 
 @Model

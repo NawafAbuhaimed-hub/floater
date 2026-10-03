@@ -17,11 +17,12 @@ public final class AppModel: ObservableObject {
     }
 
     public enum Tab: String, CaseIterable, Identifiable {
-        case tasks, notes, chat
+        case tasks, pipeline, notes, chat
         public var id: String { rawValue }
         public var title: String {
             switch self {
             case .tasks: return "Tasks"
+            case .pipeline: return "Board"
             case .notes: return "Notes"
             case .chat: return "Chat"
             }
@@ -66,6 +67,14 @@ public final class AppModel: ObservableObject {
     @Published public var expandedTaskID: UUID?
     /// The task Cmd-C acts on when no text field has focus.
     @Published public private(set) var selectedTaskID: UUID?
+    @Published public private(set) var categories: [TaskCategory] = []
+    @Published public var sort: TaskSort {
+        didSet { prefs.taskSort = sort }
+    }
+    /// Board columns: categories when true, statuses when false.
+    @Published public var pipelineByCategory: Bool {
+        didSet { prefs.pipelineByCategory = pipelineByCategory }
+    }
     @Published public var draft: String = ""
     /// Global notes pane. Written through to the store on a short debounce so
     /// typing does not hit SwiftData on every keystroke.
@@ -119,6 +128,8 @@ public final class AppModel: ObservableObject {
         self.keyStore = keyStore
         self.followUpDestination = prefs.followUpDestination
         self.logCompletions = prefs.logCompletions
+        self.sort = prefs.taskSort
+        self.pipelineByCategory = prefs.pipelineByCategory
         self.makeChatEngine = makeChatEngine
         self.engine = TimerEngine(clock: clock)
         self.soundEnabled = prefs.soundEnabled
@@ -126,6 +137,7 @@ public final class AppModel: ObservableObject {
         engine.onElapsed = { [weak self] run in
             self?.handleElapsed(run)
         }
+        store.seedCategoriesIfEmpty(home: NSHomeDirectory())
         self.scratchpad = store.scratchpadText
 
         restoreActiveRun()
@@ -137,6 +149,57 @@ public final class AppModel: ObservableObject {
     deinit { ticker?.invalidate() }
 
     public var openTasks: [TaskItem] { tasks.filter { !$0.isDone } }
+
+    /// The list in the order the user asked for. Ties fall back to manual order
+    /// so the result is stable rather than shuffling between refreshes.
+    public var sortedTasks: [TaskItem] {
+        switch sort {
+        case .manual:
+            return tasks
+        case .status:
+            return tasks.sorted { a, b in
+                if a.status.sortRank != b.status.sortRank { return a.status.sortRank < b.status.sortRank }
+                if a.dueDate != b.dueDate { return Self.dueBefore(a.dueDate, b.dueDate) }
+                return a.order < b.order
+            }
+        case .dueDate:
+            return tasks.sorted { a, b in
+                if a.dueDate != b.dueDate { return Self.dueBefore(a.dueDate, b.dueDate) }
+                if a.status.sortRank != b.status.sortRank { return a.status.sortRank < b.status.sortRank }
+                return a.order < b.order
+            }
+        }
+    }
+
+    /// A task with no due date sorts after every task that has one.
+    static func dueBefore(_ a: Date?, _ b: Date?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return false
+        case (nil, _): return false
+        case (_, nil): return true
+        case (let left?, let right?): return left < right
+        }
+    }
+
+    public func tasks(in category: TaskCategory?) -> [TaskItem] {
+        sortedTasks.filter { $0.categoryID == category?.id }
+    }
+
+    public func tasks(with status: TaskStatus) -> [TaskItem] {
+        sortedTasks.filter { $0.status == status }
+    }
+
+    public var overdueCount: Int {
+        tasks.filter { $0.dueState(now: clock.now, calendar: calendar) == .overdue }.count
+    }
+
+    public func dueState(of task: TaskItem) -> DueState {
+        task.dueState(now: clock.now, calendar: calendar)
+    }
+
+    public func category(of task: TaskItem) -> TaskCategory? {
+        store.category(id: task.categoryID)
+    }
     public var doneCount: Int { tasks.count - openTasks.count }
     public var isRunning: Bool { phase == .running }
     public var isActive: Bool { phase != .idle }
@@ -261,6 +324,29 @@ public final class AppModel: ObservableObject {
     }
 
     /// Opening a task's note also selects it, so Cmd-C has an obvious target.
+    public func setCategory(_ category: TaskCategory?, for task: TaskItem) {
+        store.setCategory(category?.id, forTaskWith: task.id)
+        refresh()
+    }
+
+    public func setDueDate(_ due: Date?, for task: TaskItem) {
+        store.setDueDate(due, forTaskWith: task.id)
+        refresh()
+    }
+
+    @discardableResult
+    public func addCategory(name: String, emoji: String = "", colorHex: String = "8E8E93",
+                            repoPath: String = "") -> TaskCategory? {
+        let created = store.addCategory(name: name, emoji: emoji, colorHex: colorHex, repoPath: repoPath)
+        refresh()
+        return created
+    }
+
+    public func deleteCategory(_ category: TaskCategory) {
+        store.deleteCategory(category)
+        refresh()
+    }
+
     public func toggleNote(for task: TaskItem) {
         expandedTaskID = expandedTaskID == task.id ? nil : task.id
         selectedTaskID = task.id
@@ -709,6 +795,7 @@ public final class AppModel: ObservableObject {
         tasks = store.tasks
         completedToday = store.completedOn(clock.now).count
         chatMessages = store.chatMessages
+        categories = store.categories
         phase = engine.phase
         remaining = engine.remaining
         progress = engine.progress

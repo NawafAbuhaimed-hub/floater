@@ -15,6 +15,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Floater"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/icon/Floater.icns "$APP/Contents/Resources/Floater.icns"
 # Each sound set keeps its own subdirectory inside the bundle.
 for set_dir in Resources/Sounds/*/; do
     set_name="$(basename "$set_dir")"

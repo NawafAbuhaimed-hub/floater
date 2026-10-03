@@ -82,6 +82,9 @@ struct PillView: View {
         case .paused: return "paused"
         case .elapsed: return "time's up"
         case .idle:
+            if model.overdueCount > 0 {
+                return "\(model.overdueCount) overdue"
+            }
             let open = model.openTasks.count
             if open == 0 { return "no tasks yet" }
             return "\(open) task\(open == 1 ? "" : "s") waiting"

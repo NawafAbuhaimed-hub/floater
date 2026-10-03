@@ -28,6 +28,8 @@ public final class Preferences {
         static let panelOrigin = "floater.panelOrigin"
         static let followUpDestination = "floater.followUpDestination"
         static let logCompletions = "floater.logCompletions"
+        static let taskSort = "floater.taskSort"
+        static let pipelineByCategory = "floater.pipelineByCategory"
         static let soundIndexPrefix = "floater.soundIndex."
         static let followUpTargetPrefix = "floater.followUpTarget."
         static let collapsedSize = "floater.collapsedSize"
@@ -86,6 +88,21 @@ public final class Preferences {
 
     public func setSoundIndex(_ index: Int, forKey key: String) {
         store.set(index, forKey: Key.soundIndexPrefix + key)
+    }
+
+    public var taskSort: TaskSort {
+        get {
+            guard let raw = store.object(forKey: Key.taskSort) as? String,
+                  let value = TaskSort(rawValue: raw) else { return .status }
+            return value
+        }
+        set { store.set(newValue.rawValue, forKey: Key.taskSort) }
+    }
+
+    /// Pipeline columns: categories when true, statuses when false.
+    public var pipelineByCategory: Bool {
+        get { store.object(forKey: Key.pipelineByCategory) as? Bool ?? false }
+        set { store.set(newValue, forKey: Key.pipelineByCategory) }
     }
 
     public var panelOrigin: CGPoint? {

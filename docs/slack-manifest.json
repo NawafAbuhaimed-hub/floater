@@ -1,0 +1,30 @@
+{
+  "display_information": {
+    "name": "Floater",
+    "description": "Keeps your Slack status in step with your focus streak and daily goal.",
+    "background_color": "#1c1c1e",
+    "long_description": "Floater is a floating task tracker that lives above every window on your Mac. This app lets it keep your Slack custom status in step with what you are actually doing: your current focus streak, how long you have focused today, and progress toward your daily goal. It can also post a short end-of-day summary of what you finished to a channel you choose. Nothing is sent to Slack until you turn it on, and you can turn it off at any time from the menu bar."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Floater",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "user": [
+        "users.profile:write",
+        "chat:write"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false,
+    "interactivity": {
+      "is_enabled": false
+    }
+  }
+}

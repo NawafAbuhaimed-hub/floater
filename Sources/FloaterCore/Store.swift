@@ -9,11 +9,12 @@ public final class Store {
     public private(set) var tasks: [TaskItem] = []
     public private(set) var followUps: [FollowUpRecord] = []
     public private(set) var chatMessages: [ChatMessageRecord] = []
+    public private(set) var categories: [TaskCategory] = []
 
     public var context: ModelContext { container.mainContext }
 
     public init(inMemory: Bool = false) throws {
-        let schema = Schema([TaskItem.self, FocusSessionRecord.self, Scratchpad.self, FollowUpRecord.self, ChatMessageRecord.self])
+        let schema = Schema([TaskItem.self, FocusSessionRecord.self, Scratchpad.self, FollowUpRecord.self, ChatMessageRecord.self, TaskCategory.self])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         container = try ModelContainer(for: schema, configurations: [config])
         reload()
@@ -46,6 +47,63 @@ public final class Store {
         tasks = (try? context.fetch(descriptor)) ?? []
         reloadFollowUps()
         reloadChat()
+        reloadCategories()
+    }
+
+    // MARK: - Categories
+
+    /// Seeds the user's real projects the first time, so categories are useful
+    /// before any setup. Never re-seeds, so deleting one keeps it deleted.
+    public func seedCategoriesIfEmpty(home: String) {
+        guard categories.isEmpty else { return }
+        for category in TaskCategory.seeds(home: home) { context.insert(category) }
+        try? context.save()
+        reloadCategories()
+    }
+
+    public func category(id: UUID?) -> TaskCategory? {
+        guard let id else { return nil }
+        return categories.first { $0.id == id }
+    }
+
+    @discardableResult
+    public func addCategory(name: String, emoji: String = "", colorHex: String = "8E8E93",
+                            repoPath: String = "") -> TaskCategory? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        let next = (categories.map(\.order).max() ?? -1) + 1
+        let category = TaskCategory(name: trimmed, emoji: emoji, colorHex: colorHex,
+                                    repoPath: repoPath, order: next)
+        context.insert(category)
+        try? context.save()
+        reloadCategories()
+        return category
+    }
+
+    /// Removing a category leaves its tasks uncategorised rather than deleting them.
+    public func deleteCategory(_ category: TaskCategory) {
+        let id = category.id
+        for task in tasks where task.categoryID == id { task.categoryID = nil }
+        context.delete(category)
+        save()
+        reloadCategories()
+    }
+
+    public func setCategory(_ categoryID: UUID?, forTaskWith id: UUID) {
+        guard let task = task(id: id) else { return }
+        task.categoryID = categoryID
+        save()
+    }
+
+    public func setDueDate(_ due: Date?, forTaskWith id: UUID) {
+        guard let task = task(id: id) else { return }
+        task.dueDate = due
+        save()
+    }
+
+    private func reloadCategories() {
+        let descriptor = FetchDescriptor<TaskCategory>(sortBy: [SortDescriptor(\.order)])
+        categories = (try? context.fetch(descriptor)) ?? []
     }
 
     // MARK: - Chat

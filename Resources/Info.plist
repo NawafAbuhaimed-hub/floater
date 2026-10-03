@@ -8,6 +8,8 @@
     <string>Floater</string>
     <key>CFBundleExecutable</key>
     <string>Floater</string>
+    <key>CFBundleIconFile</key>
+    <string>Floater</string>
     <key>CFBundleIdentifier</key>
     <string>com.nawaf.floater</string>
     <key>CFBundlePackageType</key>
