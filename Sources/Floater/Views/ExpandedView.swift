@@ -14,6 +14,7 @@ struct ExpandedView: View {
             Divider().opacity(0.5)
             switch model.tab {
             case .tasks:
+                ProgressStrip()
                 composer
                 if model.isActive { activeCard }
                 Divider().opacity(0.5)

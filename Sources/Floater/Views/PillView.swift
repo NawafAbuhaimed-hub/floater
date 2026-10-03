@@ -26,6 +26,17 @@ struct PillView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 4)
+            if !model.isActive, let stats = model.stats, stats.streakDays > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.streak)
+                    Text("\(stats.streakDays)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                }
+                .help("\(stats.streakDays) day streak")
+            }
             if model.isActive {
                 if let task = model.activeTask {
                     PillButton(symbol: "checkmark", tint: Theme.accent) {

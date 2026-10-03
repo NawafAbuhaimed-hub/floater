@@ -60,6 +60,22 @@ public final class AppModel: ObservableObject {
     @Published public private(set) var chatError: String?
     @Published public private(set) var isSendingChat = false
     @Published public private(set) var hasAPIKey = false
+    @Published public private(set) var stats: GameStats?
+    /// Bumped when a level is gained, so the app can celebrate it.
+    @Published public private(set) var levelUps: Int = 0
+    @Published public private(set) var slackError: String?
+    @Published public var slackStatusEnabled: Bool {
+        didSet {
+            prefs.slackStatusEnabled = slackStatusEnabled
+            Task { await syncSlackStatus(force: true) }
+        }
+    }
+    @Published public var goalKind: DailyGoalKind {
+        didSet { prefs.goalKind = goalKind; refresh() }
+    }
+    @Published public var goalTarget: Int {
+        didSet { prefs.goalTarget = goalTarget; refresh() }
+    }
     @Published public var chatDraft: String = ""
     @Published public private(set) var isGenerating = false
     /// Last generated digest or prompt, also placed on the clipboard by the app.
@@ -101,6 +117,7 @@ public final class AppModel: ObservableObject {
     public var scheduler: FollowUpScheduling?
     /// Reads a project's conventions and history off disk for the prompt generator.
     public var projectContext: ProjectContextReading?
+    public var slack: SlackPosting?
 
     public let timerLengths = [15, 30, 45]
 
@@ -136,6 +153,9 @@ public final class AppModel: ObservableObject {
         self.logCompletions = prefs.logCompletions
         self.sort = prefs.taskSort
         self.pipelineByCategory = prefs.pipelineByCategory
+        self.slackStatusEnabled = prefs.slackStatusEnabled
+        self.goalKind = prefs.goalKind
+        self.goalTarget = prefs.goalTarget
         self.makeChatEngine = makeChatEngine
         self.engine = TimerEngine(clock: clock)
         self.soundEnabled = prefs.soundEnabled
@@ -267,6 +287,7 @@ public final class AppModel: ObservableObject {
         refresh()
         onCelebrate?(title)
         logCompletion(taskID: task.id, title: title, focusedSeconds: spent, finishedAt: clock.now)
+        Task { await syncSlackStatus() }
     }
 
     public func reopen(_ task: TaskItem) {
@@ -572,6 +593,92 @@ public final class AppModel: ObservableObject {
         guard !eventID.isEmpty, let scheduler else { return }
         store.setCompletionEventID("", forTaskWith: task.id)
         Task { try? await scheduler.remove(id: eventID, destination: .calendar) }
+    }
+
+    // MARK: - Progress and Slack
+
+    private var lastLevel: Int?
+    private var lastStatusText: String?
+
+    private static let bragSystem = """
+    You write one short Slack message celebrating what someone got done, from \
+    their real figures. Rules:
+    - Use only the figures given. Never invent a number, a task or a project.
+    - Warm and specific, not corporate. Two or three sentences at most.
+    - Write about them in the third person, by name.
+    - End with exactly this line, on its own: "— written by Floater AI"
+    - No hashtags, no emoji spam. One or two emoji at most.
+    """
+
+    /// Pushes the current figures to Slack as a status, when the user has asked
+    /// for that. Skips an unchanged status so Slack is not written to on every
+    /// tick.
+    public func syncSlackStatus(force: Bool = false) async {
+        guard slackStatusEnabled, let slack, let stats else { return }
+        let text = SlackStatus.text(for: stats)
+        guard force || text != lastStatusText else { return }
+        do {
+            try await slack.setStatus(text: text, emoji: SlackStatus.emoji(for: stats))
+            lastStatusText = text
+            slackError = nil
+        } catch let error as SlackError {
+            slackError = error.message
+        } catch {
+            slackError = error.localizedDescription
+        }
+    }
+
+    /// Clears the status Floater set, so turning the feature off leaves nothing behind.
+    public func clearSlackStatus() async {
+        guard let slack else { return }
+        do {
+            try await slack.setStatus(text: "", emoji: "")
+            lastStatusText = nil
+        } catch { /* leaving a stale status is not worth surfacing */ }
+    }
+
+    /// Asks Claude to write up the week from real figures, and posts it.
+    public func postWeekToSlack(name: String) async {
+        guard !isGenerating else { return }
+        prepareChat()
+        guard let chat else {
+            slackError = ClaudeError.missingAPIKey.message
+            return
+        }
+        guard let slack else {
+            slackError = SlackError.notConnected.message
+            return
+        }
+        isGenerating = true
+        defer { isGenerating = false }
+
+        let facts = digest(days: 7).factSheet(calendar: calendar)
+        let stats = self.stats
+        var brief = "Name: \(name)\n\n" + facts
+        if let stats {
+            brief += """
+
+
+            Level \(stats.level), \(stats.totalXP) XP total.
+            Streak: \(stats.streakDays) day\(stats.streakDays == 1 ? "" : "s").
+            Badges earned: \(stats.earnedBadges.map(\.name).joined(separator: ", "))
+            """
+        }
+
+        do {
+            let text = try await chat.oneOff(system: Self.bragSystem, user: brief, maxTokens: 600)
+            let channel = prefs.slackChannel.isEmpty ? nil : prefs.slackChannel
+            try await slack.post(text: text, channel: channel)
+            store.appendChat(role: "assistant", text: "Posted to Slack:\n\n" + text, at: clock.now)
+            slackError = nil
+            refresh()
+        } catch let error as SlackError {
+            slackError = error.message
+        } catch let error as ClaudeError {
+            slackError = error.message
+        } catch {
+            slackError = error.localizedDescription
+        }
     }
 
     // MARK: - Digest and prompt generation
@@ -911,5 +1018,11 @@ public final class AppModel: ObservableObject {
         activeTitle = engine.run?.taskTitle ?? ""
         activePlannedMinutes = Int((engine.run?.plannedSeconds ?? 0) / 60)
         prefs.saveActiveRun(engine.run, phase: engine.phase)
+
+        let fresh = store.gameStats(now: clock.now, calendar: calendar,
+                                    goalKind: goalKind, goalTarget: goalTarget)
+        if let previous = lastLevel, fresh.level > previous { levelUps += 1 }
+        lastLevel = fresh.level
+        stats = fresh
     }
 }

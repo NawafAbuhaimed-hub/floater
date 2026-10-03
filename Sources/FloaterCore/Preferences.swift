@@ -29,6 +29,10 @@ public final class Preferences {
         static let followUpDestination = "floater.followUpDestination"
         static let logCompletions = "floater.logCompletions"
         static let taskSort = "floater.taskSort"
+        static let slackStatusEnabled = "floater.slackStatusEnabled"
+        static let slackChannel = "floater.slackChannel"
+        static let goalKind = "floater.goalKind"
+        static let goalTarget = "floater.goalTarget"
         static let pipelineByCategory = "floater.pipelineByCategory"
         static let soundIndexPrefix = "floater.soundIndex."
         static let followUpTargetPrefix = "floater.followUpTarget."
@@ -103,6 +107,33 @@ public final class Preferences {
     public var pipelineByCategory: Bool {
         get { store.object(forKey: Key.pipelineByCategory) as? Bool ?? false }
         set { store.set(newValue, forKey: Key.pipelineByCategory) }
+    }
+
+    /// Off until the user turns it on: Floater should not touch anyone's Slack
+    /// status without being asked.
+    public var slackStatusEnabled: Bool {
+        get { store.object(forKey: Key.slackStatusEnabled) as? Bool ?? false }
+        set { store.set(newValue, forKey: Key.slackStatusEnabled) }
+    }
+
+    /// Where a write-up is posted. Empty means the user's own DM.
+    public var slackChannel: String {
+        get { store.object(forKey: Key.slackChannel) as? String ?? "" }
+        set { store.set(newValue, forKey: Key.slackChannel) }
+    }
+
+    public var goalKind: DailyGoalKind {
+        get {
+            guard let raw = store.object(forKey: Key.goalKind) as? String,
+                  let kind = DailyGoalKind(rawValue: raw) else { return .tasks }
+            return kind
+        }
+        set { store.set(newValue.rawValue, forKey: Key.goalKind) }
+    }
+
+    public var goalTarget: Int {
+        get { store.object(forKey: Key.goalTarget) as? Int ?? 5 }
+        set { store.set(max(1, newValue), forKey: Key.goalTarget) }
     }
 
     public var panelOrigin: CGPoint? {

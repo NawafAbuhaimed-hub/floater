@@ -1,4 +1,5 @@
 import FloaterCore
+import AppKit
 import SwiftUI
 
 enum Theme {
@@ -14,6 +15,7 @@ enum Theme {
     }
 
     static let accent = Color(red: 0.19, green: 0.82, blue: 0.35)
+    static let streak = Color(red: 1.00, green: 0.58, blue: 0.13)
 
     /// Category colours are stored as hex so they survive in SwiftData.
     static func color(hex: String) -> Color {
@@ -83,7 +85,7 @@ struct ProgressRing: View {
 /// The diagonal grip in the bottom-right corner. Dragging it resizes the panel.
 struct ResizeGrip: View {
     @Environment(\.resizeWindow) private var resizeWindow
-    @State private var last: CGSize = .zero
+    @State private var dragging = false
     @State private var hovering = false
 
     var body: some View {
@@ -101,15 +103,17 @@ struct ResizeGrip: View {
         .onHover { hovering = $0 }
         .gesture(
             DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    let delta = CGSize(
-                        width: value.translation.width - last.width,
-                        height: value.translation.height - last.height
-                    )
-                    last = value.translation
-                    resizeWindow?(delta)
+                .onChanged { _ in
+                    // The pointer's screen position is the only measurement that
+                    // stays valid while the window is being resized underneath it.
+                    let point = NSEvent.mouseLocation
+                    resizeWindow?(point, dragging ? .changed : .began)
+                    dragging = true
                 }
-                .onEnded { _ in last = .zero }
+                .onEnded { _ in
+                    dragging = false
+                    resizeWindow?(NSEvent.mouseLocation, .ended)
+                }
         )
         .help("Drag to resize")
     }

@@ -57,6 +57,10 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(item("Open Task List", #selector(openList)))
         menu.addItem(item("Open Chat", #selector(openChat)))
         menu.addItem(item("What I Did This Week", #selector(weeklyDigest)))
+        let slack = item("Keep my Slack status updated", #selector(toggleSlack))
+        slack.state = model.slackStatusEnabled ? .on : .off
+        menu.addItem(slack)
+        menu.addItem(item("Post My Week to Slack", #selector(postWeek)))
         menu.addItem(item("Collapse to Pill", #selector(collapsePanel)))
         menu.addItem(item("Reset Panel Size & Position", #selector(resetPanel)))
         menu.addItem(.separator())
@@ -184,6 +188,17 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         model.tab = .chat
         model.mode = .expanded
         Task { await model.generateDigest(days: 7) }
+    }
+
+    @objc private func toggleSlack() {
+        model.slackStatusEnabled.toggle()
+        if !model.slackStatusEnabled {
+            Task { await model.clearSlackStatus() }
+        }
+    }
+
+    @objc private func postWeek() {
+        Task { await model.postWeekToSlack(name: NSFullUserName()) }
     }
 
     @objc private func collapsePanel() {

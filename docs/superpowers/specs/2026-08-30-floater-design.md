@@ -295,6 +295,26 @@ no tools. Tested.
 The brief is capped per document and overall, so one generation cannot balloon
 into a large bill.
 
+## Addendum — the game, and a resize bug worth recording
+
+The scoring is a set of pure functions over dates and seconds — XP, levels,
+streak, badges — so each rule is checked on its own rather than inferred from a
+screenshot. Two judgements worth stating: a streak counts back from today *or
+from yesterday*, so it is not declared broken at midnight before the day it
+would actually break on; and the Slack status is assembled clause by clause and
+stops before Slack's 100-character cut, rather than being truncated mid-word.
+
+Slack is off until the user turns it on, and turning it off clears the status
+Floater set rather than leaving a stale one behind. The weekly write-up is given
+the same fact sheet as the digest, with the same instruction to invent nothing.
+
+**The resize grip measured the drag in its own coordinate space.** The grip
+moves as the window resizes, so every frame fed the next one a corrupted delta
+and the panel jumped around. It now measures against `NSEvent.mouseLocation`,
+anchored to the frame the drag started from — the only measurement that stays
+valid while the thing being measured is moving. Verified by driving ten
+simulated steps: each grows by exactly the amount dragged.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,

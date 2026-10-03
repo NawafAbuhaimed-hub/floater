@@ -42,7 +42,7 @@ final class FloatingPanelController {
         let hosting = NSHostingView(
             rootView: RootView()
                 .environmentObject(model)
-                .environment(\.resizeWindow, { delta in resizer.handler?(delta) })
+                .environment(\.resizeWindow, { point, phase in resizer.handler?(point, phase) })
         )
         // Without this the hosting view pushes SwiftUI's intrinsic size onto the
         // window as Auto Layout constraints, which override minSize/maxSize and
@@ -51,7 +51,7 @@ final class FloatingPanelController {
         hosting.frame = NSRect(origin: .zero, size: size)
         hosting.autoresizingMask = [.width, .height]
         panel.contentView = hosting
-        defer { resizer.handler = { [weak self] delta in self?.resizeBy(delta) } }
+        defer { resizer.handler = { [weak self] point, phase in self?.handleResize(at: point, phase: phase) } }
 
         placeAtSavedOrDefaultOrigin(size: size)
 
@@ -115,24 +115,41 @@ final class FloatingPanelController {
         }
     }
 
-    /// Corner-grip resize. Grows right and down, keeping the top-left corner put.
-    private func resizeBy(_ delta: CGSize) {
-        let bounds = currentBounds
-        let current = panel.frame
-        let target = Self.clampSize(
-            CGSize(width: current.width + delta.width, height: current.height + delta.height),
-            to: bounds
-        )
-        guard target != current.size else { return }
-        let frame = NSRect(
-            x: current.minX,
-            y: current.maxY - target.height,
-            width: target.width,
-            height: target.height
-        )
-        panel.setFrame(clamped(frame), display: true)
-        panel.invalidateShadow()
-        rememberSize()
+    /// Where the drag started, in screen coordinates, with the frame it started
+    /// from.
+    private var resizeAnchor: (mouse: CGPoint, frame: NSRect)?
+
+    /// Corner-grip resize, measured against the screen rather than against the
+    /// grip's own coordinate space. The grip moves as the window resizes, so a
+    /// delta taken from the gesture's local translation fed each frame a
+    /// corrupted measurement and the panel jumped around.
+    func handleResize(at point: CGPoint, phase: ResizePhase) {
+        switch phase {
+        case .began:
+            resizeAnchor = (point, panel.frame)
+        case .changed:
+            guard let anchor = resizeAnchor else { return }
+            let target = Self.clampSize(
+                CGSize(
+                    width: anchor.frame.width + (point.x - anchor.mouse.x),
+                    // Screen coordinates run upward, so dragging down grows it.
+                    height: anchor.frame.height + (anchor.mouse.y - point.y)
+                ),
+                to: currentBounds
+            )
+            guard target != panel.frame.size else { return }
+            let frame = NSRect(
+                x: anchor.frame.minX,
+                y: anchor.frame.maxY - target.height,
+                width: target.width,
+                height: target.height
+            )
+            panel.setFrame(clamped(frame), display: true)
+            panel.invalidateShadow()
+        case .ended:
+            resizeAnchor = nil
+            rememberSize()
+        }
     }
 
     private static func clampSize(_ size: CGSize, to bounds: (min: CGSize, max: CGSize)) -> CGSize {
@@ -212,18 +229,20 @@ private extension NSRect {
 
 /// Holds the resize callback so the hosting view can be built before the
 /// controller finishes initialising.
+public enum ResizePhase { case began, changed, ended }
+
 @MainActor
 private final class ResizeBox {
-    var handler: ((CGSize) -> Void)?
+    var handler: ((CGPoint, ResizePhase) -> Void)?
 }
 
 /// Lets a SwiftUI view ask the window to resize itself.
 private struct ResizeWindowKey: EnvironmentKey {
-    static let defaultValue: ((CGSize) -> Void)? = nil
+    static let defaultValue: ((CGPoint, ResizePhase) -> Void)? = nil
 }
 
 extension EnvironmentValues {
-    var resizeWindow: ((CGSize) -> Void)? {
+    var resizeWindow: ((CGPoint, ResizePhase) -> Void)? {
         get { self[ResizeWindowKey.self] }
         set { self[ResizeWindowKey.self] = newValue }
     }
