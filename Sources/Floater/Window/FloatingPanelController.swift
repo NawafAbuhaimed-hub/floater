@@ -57,6 +57,14 @@ final class FloatingPanelController {
 
         model.$mode
             .removeDuplicates(by: { $0 == $1 })
+            // Delivered on the next runloop pass, deliberately. A @Published
+            // sink runs during the change, before SwiftUI has rendered the new
+            // content — so resizing here left the window at the new size while
+            // it still showed the old view: a pill stretched across the whole
+            // expanded panel, or a task list drawn outside a collapsed one.
+            // Letting SwiftUI switch first and moving the frame after keeps the
+            // two in step.
+            .receive(on: RunLoop.main)
             .sink { [weak self] mode in self?.apply(mode: mode) }
             .store(in: &cancellables)
 

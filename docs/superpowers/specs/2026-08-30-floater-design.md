@@ -409,6 +409,28 @@ triple toggle. Before, two of five expansions failed to take focus and the
 origin walked from x=3705 to x=4333. After, every expansion takes focus, every
 collapse releases it, and the origin is identical in every round.
 
+## The panel resized before its content changed
+
+Expanding sometimes showed the pill's background stretched across the whole
+expanded panel; collapsing sometimes drew the task list outside a pill-sized
+window. Both are the same fault seen from either side.
+
+A `@Published` sink runs *during* the change, before SwiftUI has rendered
+anything. The controller resized the window in that sink, so for a moment the
+frame was new and the content was old. The isolated check — flip the mode and
+count the hosting view's descendants — showed propagation working fine (2
+subviews to 59), which is what ruled out a binding problem and pointed at
+ordering instead.
+
+Mode changes are now delivered on the next runloop pass: SwiftUI switches the
+view first, and the frame follows. Driving the real window through four rounds
+plus a rapid triple toggle, size, keyboard focus and rendered content agree in
+all ten samples.
+
+Worth recording as a technique: rendering the panel's own SwiftUI into an
+`NSBitmapImageRep` shows exactly what the layout does without needing the
+screen, and it is what proved the expanded layout itself was never at fault.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,
