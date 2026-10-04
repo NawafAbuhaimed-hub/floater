@@ -98,7 +98,7 @@ public extension Store {
             category(id: task.categoryID)?.name ?? Digest.uncategorised
         }
 
-        let finished = tasks
+        let finished = allTasks
             .filter { task in
                 guard let done = task.completedAt else { return false }
                 return done >= from && done <= now

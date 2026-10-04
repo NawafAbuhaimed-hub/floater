@@ -311,8 +311,43 @@ public final class AppModel: ObservableObject {
     }
 
     public func clearCompleted() {
-        store.clearCompleted()
+        store.clearCompleted(at: clock.now)
         refresh()
+    }
+
+    public func showHiddenAgain() {
+        store.unarchiveAll()
+        refresh()
+    }
+
+    public var hiddenCount: Int { store.archivedCount }
+
+    /// Rebuilds finished tasks that were deleted back when clearing meant
+    /// deleting. Their focus history survived, so the work can be counted again.
+    @discardableResult
+    public func restoreLostCompletions() -> Int {
+        var byTask: [UUID: (title: String, at: Date, seconds: Double)] = [:]
+        for session in store.completedSessions() {
+            guard store.task(id: session.taskID) == nil else { continue }
+            let at = session.endedAt ?? session.startedAt
+            if var existing = byTask[session.taskID] {
+                existing.seconds += session.secondsFocused
+                existing.at = max(existing.at, at)
+                byTask[session.taskID] = existing
+            } else {
+                byTask[session.taskID] = (session.taskTitle, at, session.secondsFocused)
+            }
+        }
+        var restored = 0
+        for (id, entry) in byTask {
+            let title = entry.title.isEmpty ? "Finished task" : entry.title
+            if store.restoreCompletion(id: id, title: title, completedAt: entry.at,
+                                       secondsSpent: entry.seconds, archivedAt: clock.now) != nil {
+                restored += 1
+            }
+        }
+        refresh()
+        return restored
     }
 
     /// Setting a task to Done runs the full completion path (time banked,

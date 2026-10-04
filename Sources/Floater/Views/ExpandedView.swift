@@ -191,10 +191,16 @@ struct ExpandedView: View {
             .fixedSize()
             .disabled(model.isGenerating)
             if model.doneCount > 0 {
-                Button("Clear done") { model.clearCompleted() }
+                Button("Hide done") { model.clearCompleted() }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .help("Hides finished tasks from the list. They still count toward your XP, streak and badges.")
+            } else if model.hiddenCount > 0 {
+                Button("Show \(model.hiddenCount) hidden") { model.showHiddenAgain() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
             }
         }
         .padding(.horizontal, 14)

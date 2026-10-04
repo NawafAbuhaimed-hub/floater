@@ -19,6 +19,9 @@ public final class TaskItem {
     public var completionEventID: String = ""
     public var dueDate: Date?
     public var categoryID: UUID?
+    /// Hidden from the list but still counted. Clearing finished work should
+    /// tidy the list, not erase the fact that it happened.
+    public var archivedAt: Date?
 
     public init(
         id: UUID = UUID(),
@@ -48,6 +51,7 @@ public final class TaskItem {
     }
 
     public var isDone: Bool { status == .done }
+    public var isArchived: Bool { archivedAt != nil }
 
     /// How this task's due date reads against a given moment.
     public func dueState(now: Date, calendar: Calendar = .current) -> DueState {

@@ -6,6 +6,10 @@ import SwiftData
 @MainActor
 public class Store {
     public let container: ModelContainer
+    /// Everything ever recorded, archived included. Statistics and the digest
+    /// read this, so hiding finished work never changes the figures.
+    public private(set) var allTasks: [TaskItem] = []
+    /// What the list shows.
     public private(set) var tasks: [TaskItem] = []
     public private(set) var followUps: [FollowUpRecord] = []
     public private(set) var chatMessages: [ChatMessageRecord] = []
@@ -44,7 +48,8 @@ public class Store {
         let descriptor = FetchDescriptor<TaskItem>(
             sortBy: [SortDescriptor(\.order), SortDescriptor(\.createdAt)]
         )
-        tasks = (try? context.fetch(descriptor)) ?? []
+        allTasks = (try? context.fetch(descriptor)) ?? []
+        tasks = allTasks.filter { !$0.isArchived }
         reloadFollowUps()
         reloadChat()
         reloadCategories()
@@ -136,13 +141,13 @@ public class Store {
     }
 
     public func completedOn(_ day: Date, calendar: Calendar = .current) -> [TaskItem] {
-        tasks.filter { task in
+        allTasks.filter { task in
             guard let done = task.completedAt else { return false }
             return calendar.isDate(done, inSameDayAs: day)
         }
     }
 
-    public func task(id: UUID) -> TaskItem? { tasks.first { $0.id == id } }
+    public func task(id: UUID) -> TaskItem? { allTasks.first { $0.id == id } }
 
     // MARK: - Mutations
 
@@ -211,13 +216,47 @@ public class Store {
         save()
     }
 
-    /// Clears finished tasks. Their focus history stays in `FocusSessionRecord`.
-    public func clearCompleted() {
+    /// Hides finished tasks from the list without deleting them. Deleting them
+    /// used to take their XP, streak and badges with them, because every
+    /// statistic is derived from the tasks themselves.
+    public func clearCompleted(at date: Date = Date()) {
         for task in tasks where task.isDone {
-            context.delete(task)
+            task.archivedAt = date
         }
         save()
     }
+
+    /// Recreates a finished task that is known only from its focus history —
+    /// used to repair work deleted before clearing meant hiding. Archived, so
+    /// it counts toward the figures without reappearing in the list.
+    @discardableResult
+    public func restoreCompletion(
+        id: UUID, title: String, completedAt: Date, secondsSpent: Double, archivedAt: Date
+    ) -> TaskItem? {
+        guard task(id: id) == nil else { return nil }
+        let task = TaskItem(id: id, title: title, createdAt: completedAt,
+                            completedAt: completedAt, secondsSpent: max(0, secondsSpent),
+                            order: 0, status: .done)
+        task.archivedAt = archivedAt
+        context.insert(task)
+        save()
+        return task
+    }
+
+    public func completedSessions() -> [FocusSessionRecord] {
+        ((try? context.fetch(FetchDescriptor<FocusSessionRecord>())) ?? [])
+            .filter(\.completedTask)
+    }
+
+    /// Brings hidden tasks back into the list.
+    public func unarchiveAll() {
+        for task in allTasks where task.isArchived {
+            task.archivedAt = nil
+        }
+        save()
+    }
+
+    public var archivedCount: Int { allTasks.filter(\.isArchived).count }
 
     // MARK: - Follow-ups
 

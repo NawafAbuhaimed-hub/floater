@@ -457,6 +457,28 @@ Three rules earned their place by watching real output fail without them:
 The quality depends heavily on tasks having notes. In the run used to develop
 this, only two of thirty-four did.
 
+## Clearing finished work used to erase it
+
+"Clear done" deleted the finished tasks. Every statistic — XP, level, streak,
+badges, the digest — is derived from the tasks themselves, so tidying the list
+reset all of it to zero. The feature that was meant to be housekeeping was
+destroying the record.
+
+Finished tasks are now archived rather than deleted: hidden from the list,
+still counted. The store keeps `allTasks` alongside the visible `tasks`, and
+everything that measures reads the former. Deleting a single task is still a
+real delete, which is the distinction that was missing.
+
+**The already-lost work was recoverable.** `FocusSessionRecord` is a separate
+model, so clearing never touched it: 58 sessions survived their tasks. Each
+carries the title, the seconds focused and when it ended, which is enough to
+rebuild the task as archived and completed. Restoring on the real database took
+70 XP back to 728, and level 1 to level 5.
+
+That recovery is a method on the model with tests, not a one-off script —
+several sessions on one task collapse into one task, running it twice changes
+nothing, and a task that still exists is left alone rather than duplicated.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,

@@ -158,7 +158,7 @@ public extension Store {
     @MainActor
     func gameStats(now: Date, calendar: Calendar = .current,
                    goalKind: DailyGoalKind, goalTarget: Int) -> GameStats {
-        let finished = tasks.compactMap { task -> (date: Date, seconds: Double)? in
+        let finished = allTasks.compactMap { task -> (date: Date, seconds: Double)? in
             guard let done = task.completedAt else { return nil }
             return (done, task.secondsSpent)
         }

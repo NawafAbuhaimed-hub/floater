@@ -87,7 +87,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 225 tests
+swift test        # 241 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -103,6 +103,7 @@ you hide the pill, toggle sound and the full-screen alert, and quit.
 | Finish a task | Click the circle next to it, or ✓ on the pill |
 | Move the pill | Drag it anywhere; it remembers where |
 | Collapse | Chevron, or Escape |
+| Tidy the list | **Hide done** in the footer — hides finished tasks without touching your XP, streak or badges |
 | Copy a task | Click it, then **⌘C** — or the copy button in its note area |
 | Paste in a list of tasks | **⌘V** into the add field; one task per line |
 | Open a task's full text | Click its title — the title shows unclipped and selectable |
@@ -166,7 +167,7 @@ Resources/Sounds/more Played when more time is added to a task
 Resources/Skills       Markdown that shapes what gets written — prompt
                        engineering, UI taste, and the changelog house style.
                        Edit these to change the output without touching code
-Tests/FloaterCoreTests  225 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  241 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes
