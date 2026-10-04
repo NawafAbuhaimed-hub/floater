@@ -172,7 +172,12 @@ final class FloatingPanelController {
             height: target.height
         )
         frame = clamped(frame)
-        panel.setFrame(frame, display: true, animate: true)
+        // Deliberately not animated. An animated frame change runs
+        // asynchronously, and the focus call below was racing it — expanding
+        // sometimes left the panel without key status, so the add field would
+        // not take a keystroke. Instant resize makes the whole sequence
+        // synchronous and the outcome the same every time.
+        panel.setFrame(frame, display: true)
         // The native shadow is derived from the content's alpha; without this it
         // keeps the shape it had before the resize.
         panel.invalidateShadow()

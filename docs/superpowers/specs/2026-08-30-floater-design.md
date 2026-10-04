@@ -392,6 +392,23 @@ dead token, while a transient error such as a rate limit changes nothing.
 The credentials file is also read each time rather than cached: a cache meant a
 credential cleared from outside the app carried on being used.
 
+## Expanding the panel sometimes left it unable to type
+
+The mode change animated the frame and then asked for key status. An animated
+`setFrame` runs asynchronously, so the focus call was racing it: often the panel
+became key, sometimes it did not, and when it did not the add field would not
+take a keystroke. The panel's position drifted across toggles for the same
+reason — a second change starting while the first was still animating.
+
+Animating a panel between two fixed sizes buys very little, and it made the
+sequence non-deterministic. The frame is now set instantly, which makes the
+whole mode change synchronous.
+
+Measured by driving the real window: four expand/collapse rounds plus a rapid
+triple toggle. Before, two of five expansions failed to take focus and the
+origin walked from x=3705 to x=4333. After, every expansion takes focus, every
+collapse releases it, and the origin is identical in every round.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,
