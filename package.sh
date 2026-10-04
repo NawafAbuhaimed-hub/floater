@@ -25,7 +25,9 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 for set_dir in Resources/Sounds/*/; do
     set_name="$(basename "$set_dir")"
     mkdir -p "$APP/Contents/Resources/$set_name"
-    cp "$set_dir"*.mp3 "$APP/Contents/Resources/$set_name/"
+    # Tolerate an empty set: the repository ships no sound clips, and the app
+    # falls back to a system sound.
+    cp "$set_dir"*.mp3 "$APP/Contents/Resources/$set_name/" 2>/dev/null || true
 done
 
 echo "==> Signing (ad-hoc)"
