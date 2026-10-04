@@ -318,11 +318,13 @@ final class SlackSyncTests: XCTestCase {
         XCTAssertEqual(slack.statuses.last?.emoji, "")
     }
 
-    func testASlackFailureIsReportedAndDoesNotThrow() async {
-        slack.failWith = SlackError.api("invalid_auth")
+    func testATransientFailureIsReportedAndDoesNotThrow() async {
+        // A dead token is handled separately, in SlackTokenDeathTests.
+        slack.failWith = SlackError.api("ratelimited")
         model.slackStatusEnabled = true
         await model.syncSlackStatus(force: true)
-        XCTAssertEqual(model.slackError, SlackError.api("invalid_auth").message)
+        XCTAssertEqual(model.slackError, SlackError.api("ratelimited").message)
+        XCTAssertTrue(model.slackStatusEnabled, "a rate limit is not a disconnection")
     }
 
     func testStartingATimerSwitchesTheStatusToFocusing() async {

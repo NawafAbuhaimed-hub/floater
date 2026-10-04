@@ -4,7 +4,7 @@ import SwiftData
 /// Owns the SwiftData stack and exposes the task list as a plain array so the
 /// AppKit layer can read it without going through `@Query`.
 @MainActor
-public final class Store {
+public class Store {
     public let container: ModelContainer
     public private(set) var tasks: [TaskItem] = []
     public private(set) var followUps: [FollowUpRecord] = []

@@ -359,6 +359,39 @@ Assistant messages arrive as Markdown, and SwiftUI's `Text` renders a plain
 `String` literally — so `**hello**` arrived with its asterisks. Parsed as an
 `AttributedString` now, inline-only so newlines survive.
 
+## The ticker was burning 10% of a core doing nothing
+
+The countdown ticks four times a second. It called the full refresh, which read
+the whole database (five fetches), recomputed every statistic, wrote the active
+run to disk, and republished a dozen values — all of it four times a second,
+forever, whether anything had changed or not. Idle CPU sat between 7 and 12%.
+
+Two separate causes, and fixing only the first is not enough:
+
+1. **The hot path did cold-path work.** A countdown changing is not a reason to
+   re-read the database. The tick now updates only the values the clock moves,
+   and falls back to the full refresh solely when the timer's phase changes or
+   it reaches zero.
+2. **Every assignment to a `@Published` re-renders, changed or not.** Even after
+   (1), three values were being republished four times a second with identical
+   contents. Each is now assigned only when it actually differs, and the
+   countdown is compared in whole seconds, since that is all that is displayed.
+   When nothing is running there is no countdown at all, so the tick does
+   nothing.
+
+Idle CPU is now 0.0%. Tests pin both halves: a plain tick must not touch the
+store, and an idle tick must publish nothing.
+
+## A dead Slack token used to be retried forever
+
+An `invalid_auth` was reported into a field nobody reads and then tried again
+every five minutes for the life of the process. A token that has been revoked
+will never start working, so the feature now switches itself off and drops the
+dead token, while a transient error such as a rate limit changes nothing.
+
+The credentials file is also read each time rather than cached: a cache meant a
+credential cleared from outside the app carried on being used.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,

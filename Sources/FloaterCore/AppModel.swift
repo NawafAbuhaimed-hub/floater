@@ -635,10 +635,25 @@ public final class AppModel: ObservableObject {
             lastStatusPush = clock.now
             slackError = nil
         } catch let error as SlackError {
-            slackError = error.message
+            handle(error)
         } catch {
             slackError = error.localizedDescription
         }
+    }
+
+    /// Slack errors that mean the token will never work again. Retrying one of
+    /// these every few minutes forever helps nobody, so the feature switches
+    /// itself off and the dead token is dropped.
+    private static let deadTokenCodes: Set<String> = [
+        "invalid_auth", "token_revoked", "token_expired", "account_inactive", "not_authed",
+    ]
+
+    private func handle(_ error: SlackError) {
+        slackError = error.message
+        guard case .api(let code) = error, Self.deadTokenCodes.contains(code) else { return }
+        slackStatusEnabled = false
+        secrets.setSecret(nil, for: .slack)
+        slackError = "Slack disconnected — the token was revoked or expired. Add a new one to reconnect."
     }
 
     /// Clears the status Floater set, so turning the feature off leaves nothing behind.
@@ -1016,13 +1031,54 @@ public final class AppModel: ObservableObject {
 
     private func startTicking() {
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.tick()
-                await self?.syncSlackStatus()
-            }
+            Task { @MainActor in self?.onTick() }
         }
         RunLoop.main.add(timer, forMode: .common)
         ticker = timer
+    }
+
+    /// Ticks per Slack check: a status does not need to be reconsidered four
+    /// times a second.
+    private static let ticksPerSlackCheck = 120
+    private var ticksSinceSlackCheck = 0
+
+    /// The hot path. A countdown changing is not a reason to re-read the
+    /// database, recompute every statistic and write to disk — which is what
+    /// calling the full refresh here was doing, four times a second, forever.
+    private func onTick() {
+        let justElapsed = engine.tick()
+        if justElapsed || phase != engine.phase {
+            refresh()
+        } else if engine.isActive {
+            // Nothing is counting down when idle, so there is nothing to update.
+            refreshTimerDisplay()
+        }
+
+        ticksSinceSlackCheck += 1
+        if ticksSinceSlackCheck >= Self.ticksPerSlackCheck {
+            ticksSinceSlackCheck = 0
+            Task { await syncSlackStatus() }
+        }
+    }
+
+    /// Only the values that change as the clock moves. No store access, no
+    /// writes, no statistics — and each one published only when it actually
+    /// differs, because every assignment to a @Published re-renders the panel
+    /// whether or not the value changed.
+    public func refreshTimerDisplay() {
+        let newPhase = engine.phase
+        if phase != newPhase { phase = newPhase }
+
+        // The countdown is shown in whole seconds. Publishing four times a
+        // second to redraw the same digits is four times the work for no
+        // visible difference.
+        let newRemaining = engine.remaining
+        if Int(newRemaining.rounded(.up)) != Int(remaining.rounded(.up)) {
+            remaining = newRemaining
+        }
+
+        let newProgress = engine.progress
+        if abs(newProgress - progress) > 0.002 { progress = newProgress }
     }
 
     /// Pulls the latest state out of the store and engine into published values.

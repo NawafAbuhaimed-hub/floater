@@ -10,7 +10,6 @@ import Foundation
 /// read it, but anything running as this user can.
 final class FileSecretStore: SecretStore {
     private let url: URL
-    private var cache: [String: String]?
 
     init(directory: URL? = nil) {
         let base = directory ?? FileManager.default
@@ -44,21 +43,19 @@ final class FileSecretStore: SecretStore {
             // Set after writing: an atomic write replaces the file, and with it
             // any permissions the previous one had.
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-            cache = values
             return true
         } catch {
             return false
         }
     }
 
+    /// Read every time rather than cached: the file is a few hundred bytes, and
+    /// a cache means a credential cleared from outside the app keeps being used.
     private func load() -> [String: String] {
-        if let cache { return cache }
         guard let data = try? Data(contentsOf: url),
               let values = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
-            cache = [:]
             return [:]
         }
-        cache = values
         return values
     }
 }
