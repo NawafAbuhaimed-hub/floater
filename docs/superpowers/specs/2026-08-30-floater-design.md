@@ -431,6 +431,32 @@ Worth recording as a technique: rendering the panel's own SwiftUI into an
 `NSBitmapImageRep` shows exactly what the layout does without needing the
 screen, and it is what proved the expanded layout itself was never at fault.
 
+## The digest writes release notes, not a diary
+
+The first version produced a narrative paragraph about the week. What was
+actually wanted was a changelog: themed sections, one line per change, each
+written as what is now true for the reader rather than what was set out to be
+done.
+
+Two things had to change beyond the wording. The fact sheet now carries each
+task's **note**, because the title says what was attempted and the note usually
+says what changed — and the note is what a changelog line needs. And the style
+moved into `Resources/Skills/changelog.md`, so the format is editable without a
+code change, like the other skills.
+
+Three rules earned their place by watching real output fail without them:
+
+- **Never put everything under one heading.** The first run put twenty-seven
+  bullets under a single "CRM" section. Sections are named after the part of the
+  product the reader uses, never after the project.
+- **Every line is something that is now true.** A finished task whose title
+  names a problem was being written up as an outstanding problem.
+- **A line that only restates its task title is worse than no line.** "Data
+  cleanup: data cleanup has been completed" says nothing.
+
+The quality depends heavily on tasks having notes. In the run used to develop
+this, only two of thirty-four did.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,

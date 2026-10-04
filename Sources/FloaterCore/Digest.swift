@@ -8,6 +8,7 @@ public struct Digest: Equatable, Sendable {
     public struct Entry: Equatable, Sendable {
         public let title: String
         public let category: String
+        public let note: String
         public let completedAt: Date
         public let secondsFocused: Double
     }
@@ -59,10 +60,14 @@ public struct Digest: Equatable, Sendable {
             lines.append("")
             lines.append("Finished:")
             for entry in completed {
-                var line = "- \(day.string(from: entry.completedAt)): \(entry.title)"
+                var line = "- \(entry.title)"
                 if entry.category != Digest.uncategorised { line += " [\(entry.category)]" }
-                if entry.secondsFocused > 0 { line += " (\(entry.secondsFocused.compactDuration))" }
                 lines.append(line)
+                // The note usually says what actually changed, which is what a
+                // reader needs and the title rarely gives.
+                if !entry.note.isEmpty {
+                    lines.append("  note: \(entry.note.prefix(240))")
+                }
             }
         }
 
@@ -101,6 +106,7 @@ public extension Store {
             .sorted { ($0.completedAt ?? from) < ($1.completedAt ?? from) }
             .map {
                 Digest.Entry(title: $0.title, category: name(for: $0),
+                             note: $0.note.trimmingCharacters(in: .whitespacesAndNewlines),
                              completedAt: $0.completedAt ?? from, secondsFocused: $0.secondsSpent)
             }
 

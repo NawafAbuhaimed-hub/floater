@@ -116,6 +116,16 @@ final class DigestTests: XCTestCase {
         XCTAssertTrue(sheet.contains("No finished work in this window."), sheet)
     }
 
+    func testTheFactSheetCarriesTheNotes() {
+        let task = finish("CRM: hatif api", daysAgo: 1, minutes: 30, category: "MNZIL CRM")
+        store.updateNote("every call on the sales number now lands on the deal with its recording",
+                         forTaskWith: task.id)
+        model.refresh()
+
+        let sheet = model.digest(days: 7).factSheet(calendar: calendar)
+        XCTAssertTrue(sheet.contains("note: every call on the sales number"), sheet)
+    }
+
     func testTheFactSheetCarriesEveryFigureTheWriteUpMayUse() {
         finish("Ship the deck", daysAgo: 1, minutes: 45, category: "MNZIL CRM")
         let sheet = model.digest(days: 7).factSheet(calendar: calendar)
@@ -325,5 +335,26 @@ final class UITaskDetectionTests: XCTestCase {
         XCTAssertFalse(PromptBuilder.isUITask(try task("Apply migration 046"), categoryName: nil))
         XCTAssertFalse(PromptBuilder.isUITask(try task("Chase the invoice"), categoryName: nil))
         XCTAssertFalse(PromptBuilder.isUITask(try task("Webhook auth is missing"), categoryName: nil))
+    }
+}
+
+final class ChangelogStyleTests: XCTestCase {
+    override func tearDown() {
+        PromptBuilder.skills = [:]
+        super.tearDown()
+    }
+
+    func testTheHouseStyleIsIncludedWhenPresent() {
+        PromptBuilder.skills = ["changelog": "GROUP INTO THEMED SECTIONS"]
+        let system = AppModel.digestSystem()
+        XCTAssertTrue(system.contains("GROUP INTO THEMED SECTIONS"), system)
+        XCTAssertTrue(system.contains("Never invent a change"))
+    }
+
+    func testAMissingStyleFileStillProducesUsableRules() {
+        PromptBuilder.skills = [:]
+        let system = AppModel.digestSystem()
+        XCTAssertFalse(system.isEmpty)
+        XCTAssertTrue(system.contains("Use only what is in the fact sheet"))
     }
 }

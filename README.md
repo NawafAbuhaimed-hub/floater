@@ -43,9 +43,12 @@ timers and a confetti burst when you finish something.
 - **Chat.** Describe your work in plain language (English or Arabic) and Claude
   proposes changes — new tasks, statuses, timers, notes, follow-ups. Nothing is
   applied until you press **Apply**.
-- **"What I did" digest.** Pick a window — 1, 7, 14 or 30 days — and get a
-  write-up of what you finished, how long you focused, and where the time went
-  by project. The figures come from your own records; Claude only phrases them.
+- **"What I did" digest.** Pick a window — 1, 7, 14 or 30 days — and get
+  release notes, not a diary: themed sections, one line per change, written as
+  what is now true for the reader, with a Bug fixes section at the end. The
+  house style lives in `Resources/Skills/changelog.md`, so you can change the
+  format by editing markdown. Everything traces to your own records; Claude only
+  phrases it.
 - **Claude Code prompts from a task.** Right-click a task (or the terminal
   button in its note) and Floater writes a prompt you can paste straight into
   Claude Code — informed by that project's `CLAUDE.md`, its design systems, its
@@ -84,7 +87,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 222 tests
+swift test        # 225 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -160,9 +163,10 @@ Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
 Resources/Sounds/done Played when a task is finished
 Resources/Sounds/more Played when more time is added to a task
-Resources/Skills       Markdown that shapes how prompts are written; edit to
-                       change the output without touching code
-Tests/FloaterCoreTests  222 tests over the engine, store, statuses, notes, app model
+Resources/Skills       Markdown that shapes what gets written — prompt
+                       engineering, UI taste, and the changelog house style.
+                       Edit these to change the output without touching code
+Tests/FloaterCoreTests  225 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

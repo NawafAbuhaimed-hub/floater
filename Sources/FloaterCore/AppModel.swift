@@ -715,16 +715,19 @@ public final class AppModel: ObservableObject {
         store.digest(days: days, now: clock.now, calendar: calendar)
     }
 
-    private static let digestSystem = """
-    You write a short end-of-period summary of what someone got done, from a \
-    fact sheet. Rules:
-    - Use only what is in the fact sheet. Never invent a task, a number or a project.
-    - Lead with the headline: how much was finished and where the time went.
-    - Group by project when there is more than one.
-    - Two short paragraphs or a tight bullet list. No preamble, no sign-off.
-    - Plain and factual. Do not praise the person.
-    - If nothing was finished, say so in one line rather than padding.
+    nonisolated static let digestBaseSystem = """
+    You turn a fact sheet of finished work into release notes a colleague can \
+    read. Follow the house style below exactly.
+
+    Use only what is in the fact sheet. Never invent a change, a number or a \
+    project. Output the notes themselves — no preamble, no sign-off.
     """
+
+    /// The base rules plus the editable house style.
+    nonisolated static func digestSystem() -> String {
+        guard let style = PromptBuilder.skills["changelog"] else { return digestBaseSystem }
+        return digestBaseSystem + "\n\n" + style
+    }
 
     /// Writes up the period from real figures. Claude phrases it; the numbers
     /// come from the store.
@@ -744,7 +747,7 @@ public final class AppModel: ObservableObject {
         store.appendChat(role: "user", text: "What did I do in the last \(days) days?", at: clock.now)
         refresh()
         do {
-            let text = try await chat.oneOff(system: Self.digestSystem, user: facts)
+            let text = try await chat.oneOff(system: Self.digestSystem(), user: facts, maxTokens: 2048)
             store.appendChat(role: "assistant", text: text, at: clock.now)
             lastGenerated = text
             refresh()
