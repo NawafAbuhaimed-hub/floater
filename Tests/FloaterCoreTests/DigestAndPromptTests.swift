@@ -212,10 +212,11 @@ final class PromptGenerationTests: XCTestCase {
         XCTAssertTrue(brief.contains("CRM: add qualifier filter"))
     }
 
-    func testAnEmptyContextSaysSoInsteadOfPretending() {
+    func testWithNoProjectTheBriefSaysToNameNoRepository() {
         let item = task("Loose end")
         let brief = PromptBuilder.brief(task: item, categoryName: nil, dueDescription: nil, context: .empty)
-        XCTAssertTrue(brief.contains("do not assume a repository"), brief)
+        XCTAssertTrue(brief.contains("without naming a repository"), brief)
+        XCTAssertFalse(brief.lowercased().contains("limited"), "it must not invite an apology")
     }
 
     func testTheBriefIsCappedSoOneGenerationCannotBalloon() {
@@ -262,5 +263,67 @@ final class PromptGenerationTests: XCTestCase {
         let request = client.requests.last!
         XCTAssertNil(request.tools, "a one-off generation must not offer the task tools")
         XCTAssertEqual(request.messages.count, 1, "and must not replay the chat history")
+    }
+}
+
+final class PromptSkillTests: XCTestCase {
+    override func setUp() {
+        super.setUp()
+        PromptBuilder.skills = [
+            "prompt-engineering": "BE THE CONTEXT, DO NOT POINT AT IT",
+            "ui-taste": "DEFAULTS ARE THE ENEMY",
+        ]
+    }
+    override func tearDown() {
+        PromptBuilder.skills = [:]
+        super.tearDown()
+    }
+
+    func testTheSystemPromptForbidsDelegatingItsOwnResearch() {
+        let system = PromptBuilder.system(includeUITaste: false)
+        XCTAssertTrue(system.contains("NEVER tell it to go and read something"), system)
+        XCTAssertTrue(system.contains("NEVER ask the user a question"))
+        XCTAssertTrue(system.contains("NEVER say the context is limited"))
+    }
+
+    func testThePromptEngineeringSkillIsAlwaysIncluded() {
+        XCTAssertTrue(PromptBuilder.system(includeUITaste: false)
+            .contains("BE THE CONTEXT, DO NOT POINT AT IT"))
+    }
+
+    func testUITasteIsOnlyIncludedForWorkThatTouchesAScreen() {
+        XCTAssertFalse(PromptBuilder.system(includeUITaste: false).contains("DEFAULTS ARE THE ENEMY"))
+        XCTAssertTrue(PromptBuilder.system(includeUITaste: true).contains("DEFAULTS ARE THE ENEMY"))
+    }
+
+    func testAMissingSkillFileIsNotFatal() {
+        PromptBuilder.skills = [:]
+        let system = PromptBuilder.system(includeUITaste: true)
+        XCTAssertFalse(system.isEmpty)
+        XCTAssertTrue(system.contains("NEVER ask the user a question"))
+    }
+}
+
+@MainActor
+final class UITaskDetectionTests: XCTestCase {
+    private func task(_ title: String, note: String = "") throws -> TaskItem {
+        let store = try Store(inMemory: true)
+        let item = store.add(title: title)!
+        if !note.isEmpty { store.updateNote(note, forTaskWith: item.id) }
+        return store.tasks[0]
+    }
+
+    func testScreenWorkIsRecognised() throws {
+        XCTAssertTrue(PromptBuilder.isUITask(try task("Fix the dashboard layout"), categoryName: nil))
+        XCTAssertTrue(PromptBuilder.isUITask(try task("Dark mode for the deal card"), categoryName: nil))
+        XCTAssertTrue(PromptBuilder.isUITask(try task("Rework the modal"), categoryName: nil))
+        XCTAssertTrue(PromptBuilder.isUITask(
+            try task("Tidy the export", note: "the table styling is off"), categoryName: nil))
+    }
+
+    func testBackendWorkIsNot() throws {
+        XCTAssertFalse(PromptBuilder.isUITask(try task("Apply migration 046"), categoryName: nil))
+        XCTAssertFalse(PromptBuilder.isUITask(try task("Chase the invoice"), categoryName: nil))
+        XCTAssertFalse(PromptBuilder.isUITask(try task("Webhook auth is missing"), categoryName: nil))
     }
 }

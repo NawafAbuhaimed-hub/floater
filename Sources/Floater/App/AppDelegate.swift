@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         model.scheduler = EventKitScheduler()
         model.projectContext = DiskProjectContext()
+        PromptBuilder.skills = Self.bundledSkills()
         model.slack = SlackHTTPClient(token: { secrets.secret(.slack) })
 
         // The prompt appears with the confetti and clears itself unless the user
@@ -105,6 +106,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) { [weak self] in
             self?.celebration.dismiss()
+        }
+    }
+
+    /// Markdown skills shipped in the bundle, so how prompts are written can be
+    /// changed by editing a file rather than the code.
+    private static func bundledSkills() -> [String: String] {
+        let urls = Bundle.main.urls(forResourcesWithExtension: "md", subdirectory: "skills") ?? []
+        return urls.reduce(into: [:]) { result, url in
+            result[url.deletingPathExtension().lastPathComponent] =
+                (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         }
     }
 

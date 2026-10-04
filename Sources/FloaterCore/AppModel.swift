@@ -774,10 +774,13 @@ public final class AppModel: ObservableObject {
 
         let brief = PromptBuilder.brief(task: task, categoryName: categoryName,
                                         dueDescription: dueDescription, context: context)
+        let system = PromptBuilder.system(
+            includeUITaste: PromptBuilder.isUITask(task, categoryName: categoryName)
+        )
         store.appendChat(role: "user", text: "Write a Claude Code prompt for: \(task.title)", at: clock.now)
         refresh()
         do {
-            let text = try await chat.oneOff(system: PromptBuilder.system, user: brief, maxTokens: 2048)
+            let text = try await chat.oneOff(system: system, user: brief, maxTokens: 2048)
             store.appendChat(role: "assistant", text: text, at: clock.now)
             lastGenerated = text
             refresh()

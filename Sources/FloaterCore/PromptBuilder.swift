@@ -48,7 +48,8 @@ public protocol ProjectContextReading: Sendable {
 public enum PromptBuilder {
     /// Caps so a single generation cannot balloon: per document, and overall.
     public static let documentLimit = 3_500
-    public static let totalLimit = 24_000
+    public static let noteLimit = 900
+    public static let totalLimit = 26_000
 
     public static func keywords(for task: TaskItem, categoryName: String?) -> [String] {
         let stop: Set<String> = [
@@ -64,29 +65,62 @@ public enum PromptBuilder {
         return words.filter { seen.insert($0).inserted }
     }
 
-    public static let system = """
+    /// Skills bundled with the app, loaded by the host. Editing the markdown
+    /// changes how prompts are written without touching code.
+    public static var skills: [String: String] = [:]
+
+    static let baseSystem = """
     You write prompts for Claude Code, a coding agent that works in a terminal \
     inside a repository.
 
-    You are given one task from the user's task list and real context about the \
-    project it belongs to. Produce a single prompt the user can paste straight \
-    into Claude Code.
+    You are given one task and REAL context about the project it belongs to: \
+    its conventions, its recent commits, and the user's own notes about it. \
+    That context is the whole point. Your job is to pour it into the prompt so \
+    the agent starts already knowing it.
 
-    Rules:
-    - Write the prompt itself. No preamble, no explanation, no code fences.
-    - Address Claude Code directly, in the second person.
-    - Open with what to achieve, not how. Let it choose the approach.
-    - Fold in the project's real conventions, file paths and constraints from \
-    the context. Those are the point — a prompt that ignores them is worthless.
-    - Call out any gotcha in the notes that would bite, such as a migration that \
-    is written but not applied, or a deploy that gets reverted.
-    - If the context is thin, say plainly in the prompt what it should read first \
-    to orient itself, rather than inventing detail.
-    - End with how it should verify the work.
-    - Never invent file paths, scripts or commands that are not in the context.
-    - Do not end with a question. The prompt gets pasted into a terminal and \
-    run; there is nobody there to answer it.
+    Hard rules:
+    - Output the prompt itself. No preamble, no explanation, no code fences, \
+    no sign-off.
+    - Address the agent directly, in the second person.
+    - NEVER tell it to go and read something to orient itself, familiarise \
+    itself, or understand the conventions. You have those conventions in front \
+    of you. State them, inline, as instructions. A prompt that delegates its \
+    own research has failed.
+    - NEVER ask the user a question, and never end with one. The prompt is \
+    pasted into a terminal; nobody is there to answer.
+    - NEVER say the context is limited, thin, or unclear. Write the best prompt \
+    the context supports and stop.
+    - Name specific files, directories, commands and constraints when the \
+    context gives them. Invent none that it does not.
+    - Put anything that would waste an hour near the top: a migration written \
+    but not applied, a deploy that gets reverted, a required flag.
+    - End with how to verify the work.
     """
+
+    /// Keywords that mean the task touches a screen, so taste guidance applies.
+    static let uiWords: Set<String> = [
+        "ui", "ux", "design", "component", "page", "screen", "view", "layout",
+        "css", "style", "styles", "styling", "button", "modal", "dialog", "form",
+        "card", "table", "chart", "dashboard", "colour", "color", "font", "icon",
+        "responsive", "dark", "theme", "animation", "frontend",
+    ]
+
+    public static func isUITask(_ task: TaskItem, categoryName: String?) -> Bool {
+        let words = Set(keywords(for: task, categoryName: categoryName))
+        return !words.isDisjoint(with: uiWords)
+    }
+
+    /// The base rules, plus whichever skills apply to this task.
+    public static func system(includeUITaste: Bool) -> String {
+        var parts = [baseSystem]
+        if let engineering = skills["prompt-engineering"] {
+            parts.append("# How to write it\n\n" + engineering)
+        }
+        if includeUITaste, let taste = skills["ui-taste"] {
+            parts.append("# This task touches a screen\n\n" + taste)
+        }
+        return parts.joined(separator: "\n\n")
+    }
 
     /// The brief: the task, then the project context, truncated to the budget.
     public static func brief(
@@ -105,7 +139,8 @@ public enum PromptBuilder {
         guard !context.isEmpty else {
             lines.append(contentsOf: [
                 "", "# Project context", "",
-                "None — this task has no project attached, so do not assume a repository.",
+                "This task has no project attached. Write the prompt from the task alone,",
+                "without naming a repository, a file or a command.",
             ])
             return lines.joined(separator: "\n")
         }
@@ -115,8 +150,15 @@ public enum PromptBuilder {
         if !context.branch.isEmpty { lines.append("Branch: \(context.branch)") }
 
         if !context.notes.isEmpty {
-            lines.append(contentsOf: ["", "## The user's own notes on this project", ""])
-            lines.append(contentsOf: context.notes.map { "- \($0)" })
+            lines.append(contentsOf: [
+                "", "## The user's own notes on this project",
+                "", "These are hard-won and often contain the traps. Fold the relevant ones",
+                "into the prompt as statements of fact.", "",
+            ])
+            for note in context.notes {
+                lines.append(truncate(note, to: noteLimit))
+                lines.append("")
+            }
         }
         if !context.recentCommits.isEmpty {
             lines.append(contentsOf: ["", "## Recent commits", ""])

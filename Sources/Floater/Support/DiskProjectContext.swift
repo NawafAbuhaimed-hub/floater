@@ -78,22 +78,33 @@ struct DiskProjectContext: ProjectContextReading {
             if !project.isEmpty, haystack.contains(project) { score += 4 }
             score += keywords.filter { haystack.contains($0) }.count
             guard score >= 4 else { continue }
-            scored.append((score, summary(of: body, fallback: file.deletingPathExtension().lastPathComponent)))
+            scored.append((score, excerpt(of: body, titled: file.deletingPathExtension().lastPathComponent)))
         }
         return scored.sorted { $0.score > $1.score }.prefix(maxNotes).map(\.line)
     }
 
-    /// A note's `description:` line if it has one, else its first real sentence.
-    private func summary(of body: String, fallback: String) -> String {
-        for line in body.components(separatedBy: "\n") {
-            if line.hasPrefix("description:") {
-                return line.replacingOccurrences(of: "description:", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-            }
+    /// The note's actual substance. Reducing each one to its `description:`
+    /// line threw away the body — the why and the how-to-apply — which is
+    /// exactly the part that makes a generated prompt worth having.
+    private func excerpt(of body: String, titled title: String) -> String {
+        var lines = body.components(separatedBy: "\n")
+
+        // Drop the YAML front matter, keeping the description as a heading.
+        var description: String?
+        if lines.first?.trimmingCharacters(in: .whitespaces) == "---",
+           let closing = lines.dropFirst().firstIndex(where: {
+               $0.trimmingCharacters(in: .whitespaces) == "---"
+           }) {
+            description = lines[1..<closing]
+                .first { $0.hasPrefix("description:") }?
+                .replacingOccurrences(of: "description:", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            lines = Array(lines[(closing + 1)...])
         }
-        let firstLine = body.components(separatedBy: "\n")
-            .first { !$0.hasPrefix("-") && !$0.hasPrefix("#") && !$0.isEmpty && !$0.contains(":") }
-        return firstLine?.trimmingCharacters(in: .whitespaces) ?? fallback
+
+        let content = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+        let heading = "### \(description ?? title)"
+        return content.isEmpty ? heading : heading + "\n" + content
     }
 
     private func run(_ tool: String, _ arguments: [String]) -> String? {

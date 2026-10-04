@@ -4,6 +4,17 @@ import SwiftUI
 /// The Chat tab: describe work in plain language, review what it proposes,
 /// apply or discard.
 struct ChatView: View {
+    /// Messages come back as Markdown. SwiftUI's `Text` renders a plain String
+    /// literally, which is why **bold** was arriving with its asterisks still
+    /// attached. Inline-only parsing keeps newlines, which the block parser
+    /// would collapse.
+    static func formatted(_ text: String) -> AttributedString {
+        (try? AttributedString(
+            markdown: text,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(text)
+    }
+
     @EnvironmentObject private var model: AppModel
     @FocusState private var inputFocused: Bool
     @State private var keyDraft = ""
@@ -67,7 +78,7 @@ struct ChatView: View {
     private func bubble(_ message: ChatMessageRecord) -> some View {
         HStack(alignment: .bottom) {
             if message.isUser { Spacer(minLength: 28) }
-            Text(message.text)
+            Text(Self.formatted(message.text))
                 .font(.system(size: 12))
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)

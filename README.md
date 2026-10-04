@@ -49,7 +49,9 @@ timers and a confetti burst when you finish something.
 - **Claude Code prompts from a task.** Right-click a task (or the terminal
   button in its note) and Floater writes a prompt you can paste straight into
   Claude Code — informed by that project's `CLAUDE.md`, its design systems, its
-  last 20 commits, and your own notes about it.
+  last 20 commits, and the full text of your own notes about it. The prompt is
+  written to be self-sufficient: it states the conventions rather than telling
+  the agent to go and read them, and never ends with a question.
 - **Levels, streaks, goals and badges.** A finished task is worth XP, more for
   time actually focused on it. A streak counts consecutive days with something
   finished, and survives a day that has not finished yet. A daily goal ring
@@ -82,7 +84,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 211 tests
+swift test        # 214 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -158,7 +160,9 @@ Sources/FloaterCore   Timer engine, SwiftData store, app model, preferences,
 Sources/Floater       AppKit panels, SwiftUI views, menu bar, sounds
 Resources/Sounds/done Played when a task is finished
 Resources/Sounds/more Played when more time is added to a task
-Tests/FloaterCoreTests  211 tests over the engine, store, statuses, notes, app model
+Resources/Skills       Markdown that shapes how prompts are written; edit to
+                       change the output without touching code
+Tests/FloaterCoreTests  214 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

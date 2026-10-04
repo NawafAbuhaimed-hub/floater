@@ -326,6 +326,39 @@ anchored to the frame the drag started from — the only measurement that stays
 valid while the thing being measured is moving. Verified by driving ten
 simulated steps: each grows by exactly the amount dragged.
 
+## Why the generated prompts kept asking for context
+
+Two causes, both mine.
+
+**Each note was reduced to one line.** The reader kept only the `description:`
+from the front matter and discarded the body — which is where the why, the
+how-to-apply and the traps live. The prompt was being built from headlines.
+Notes now carry their substance, capped per note.
+
+**The system prompt asked for it.** It said: "if the context is thin, say
+plainly what it should read first to orient itself". That instruction produced
+exactly the behaviour it was meant to guard against. It is now forbidden
+outright: never delegate the research, never ask a question, never remark that
+the context is limited.
+
+With both fixed, the same task went from "start by reading DATASOURCES.md to
+orient yourself" to naming the file, the data structure, the rule numbers, the
+migration script and its applied date, the deployed bundle and the branch.
+
+## Skills are files, not code
+
+`Resources/Skills/*.md` ship in the bundle and are loaded at launch. Prompt
+engineering applies to every generation; the taste guidance is added only when
+the task's words say it touches a screen. Editing the markdown changes the
+output without a code change, and a missing file degrades to the base rules
+rather than failing.
+
+## Chat was showing its own Markdown
+
+Assistant messages arrive as Markdown, and SwiftUI's `Text` renders a plain
+`String` literally — so `**hello**` arrived with its asterisks. Parsed as an
+`AttributedString` now, inline-only so newlines survive.
+
 ## Deliberately not built
 
 iCloud sync, subtasks, tags, projects, recurring tasks, a stats dashboard,
