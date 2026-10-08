@@ -118,6 +118,8 @@ public final class AppModel: ObservableObject {
     /// Reads a project's conventions and history off disk for the prompt generator.
     public var projectContext: ProjectContextReading?
     public var slack: SlackPosting?
+    /// Reads today's meetings, so the status can tell a packed day from a quiet one.
+    public var calendarReader: CalendarReading?
 
     public let timerLengths = [15, 30, 45]
 
@@ -639,10 +641,9 @@ public final class AppModel: ObservableObject {
 
     private var lastLevel: Int?
     private var lastStatusText: String?
-    private var lastStatusPush: Date?
-    /// How stale a status may get before it is pushed again, so the day's
-    /// progress stays current without writing to Slack on every tick.
-    public static let slackRefreshInterval: TimeInterval = 5 * 60
+    /// The slot the current status belongs to, so it changes once per slot
+    /// rather than whenever something incidental moves.
+    private var lastStatusSlot: Int?
 
     private static let bragSystem = """
     You write one short Slack message celebrating what someone got done, from \
@@ -657,17 +658,34 @@ public final class AppModel: ObservableObject {
     /// Pushes the current figures to Slack as a status, when the user has asked
     /// for that. Skips an unchanged status so Slack is not written to on every
     /// tick.
+    /// Pushes a line to Slack, once per three-hour slot between 9am and 9pm on
+    /// the working week. Outside those hours nothing is touched.
     public func syncSlackStatus(force: Bool = false) async {
         guard slackStatusEnabled, let slack, let stats else { return }
-        let text = SlackStatus.text(for: stats, focusing: isRunning,
-                                    at: clock.now, calendar: calendar)
-        let stale = lastStatusPush.map { clock.now.timeIntervalSince($0) >= Self.slackRefreshInterval } ?? true
-        guard force || text != lastStatusText || stale else { return }
+        guard let slot = StatusSchedule.slot(at: clock.now, calendar: calendar) else { return }
+        guard force || slot != lastStatusSlot else { return }
+
+        let events = await calendarReader?.today(now: clock.now) ?? .none
+        let mood = StatusQuotes.mood(
+            events: events,
+            focusing: isRunning,
+            overdue: overdueCount,
+            blocked: tasks.filter { $0.status == .blocked }.count,
+            goalMet: stats.goalMet,
+            slot: slot
+        )
+        let text = StatusQuotes.text(
+            for: mood, seed: StatusSchedule.seed(at: clock.now, calendar: calendar)
+        )
+        guard force || text != lastStatusText else {
+            lastStatusSlot = slot
+            return
+        }
+
         do {
-            try await slack.setStatus(text: text,
-                                      emoji: SlackStatus.emoji(for: stats, focusing: isRunning))
+            try await slack.setStatus(text: text, emoji: StatusQuotes.emoji(for: mood))
             lastStatusText = text
-            lastStatusPush = clock.now
+            lastStatusSlot = slot
             slackError = nil
         } catch let error as SlackError {
             handle(error)

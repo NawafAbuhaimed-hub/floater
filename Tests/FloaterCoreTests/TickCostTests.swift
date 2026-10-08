@@ -98,9 +98,18 @@ final class SlackTokenDeathTests: XCTestCase {
         try super.setUpWithError()
         secrets = InMemorySecretStore([.slack: "xoxp-dead"])
         slack = FailingSlack()
+        // The status only pushes inside its window, so the clock has to sit in
+        // one for the failure path to be reached at all.
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Riyadh")!
+        let formatter = DateFormatter()
+        formatter.calendar = cal
+        formatter.timeZone = cal.timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
         model = AppModel(store: try Store(inMemory: true),
                          prefs: Preferences(store: InMemoryStore()),
-                         clock: TestClock(), secrets: secrets, autoTick: false)
+                         clock: TestClock(now: formatter.date(from: "2026-10-04 10:00")!),
+                         calendar: cal, secrets: secrets, autoTick: false)
         model.slack = slack
     }
 

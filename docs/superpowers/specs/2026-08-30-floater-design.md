@@ -307,7 +307,19 @@ stops before Slack's 100-character cut, rather than being truncated mid-word.
 Slack is off until the user turns it on, and turning it off clears the status
 Floater set rather than leaving a stale one behind.
 
-**The status is a joke, not a scoreboard.** It carries no task count, no level
+**The status is a film line, chosen by the day.** Mood is read first from the
+calendar (in a meeting, a packed day), then the timer, then the list (overdue,
+blocked, goal met), and the last slot of the evening always winds down rather
+than reporting that you are behind — nine at night is not the time to be told
+that. Lines are short quotations and the pool is small and curated.
+
+It changes on a schedule rather than on events: five slots a day at 9, 12, 15,
+18 and 21, Sunday to Friday, and outside those hours Floater leaves whatever is
+there alone instead of announcing an empty evening. One consequence worth
+knowing: the mood is sampled once per slot, so a meeting that starts after the
+slot fired is not reflected until the next one.
+
+**It is still not a scoreboard.** It carries no task count, no level
 and no goal progress — the only number it may ever show is the streak's day
 count, and a test asserts exactly that across every state and every hour of the
 day. It also has no parameter for the task title, so what the user is working on

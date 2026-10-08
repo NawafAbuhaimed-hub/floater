@@ -59,11 +59,13 @@ timers and a confetti burst when you finish something.
   time actually focused on it. A streak counts consecutive days with something
   finished, and survives a day that has not finished yet. A daily goal ring
   tracks tasks or minutes. Ten badges unlock as you go.
-- **Slack status**, off until you turn it on in the menu bar. It is a joke, not
-  a scoreboard: "heads down, do not perceive me" while a timer runs, "touching
-  grass (metaphorically)" when none is, and "day 12 of pretending I have it
-  together" once you are on a streak. No task counts, no level, and never the
-  name of what you are working on. Turning it off clears it. **Post My Week to Slack** has Claude write up your week from the
+- **Slack status**, off until you turn it on in the menu bar. A line from the
+  films — Iron Man, Spider-Man, the Guardians — chosen to suit the day, signed
+  "by Floater ai". It changes every three hours between 9am and 9pm, Sunday to
+  Friday, and is left alone outside those times. Which line you get depends on
+  your calendar and your list: in a meeting, a packed day, a timer running,
+  something overdue, the goal met. No task counts, no level, and never the name
+  of what you are working on. **Post My Week to Slack** has Claude write up your week from the
   real figures and posts it, signed by Floater AI.
 - **Resizable.** Drag the grip in the bottom-right corner. The pill and the
   expanded panel remember their own sizes.
@@ -87,7 +89,7 @@ that entirely — a locally built app is not quarantined.
 ```bash
 ./run.sh          # build, install nothing, just launch
 ./build.sh --install   # also copy to ~/Applications
-swift test        # 241 tests
+swift test        # 248 tests
 ```
 
 Floater has no Dock icon. It lives in the menu bar (timer glyph) — that is where
@@ -167,7 +169,7 @@ Resources/Sounds/more Played when more time is added to a task
 Resources/Skills       Markdown that shapes what gets written — prompt
                        engineering, UI taste, and the changelog house style.
                        Edit these to change the output without touching code
-Tests/FloaterCoreTests  241 tests over the engine, store, statuses, notes, app model
+Tests/FloaterCoreTests  248 tests over the engine, store, statuses, notes, app model
 ```
 
 The countdown is deadline-based rather than tick-counting, which is what makes

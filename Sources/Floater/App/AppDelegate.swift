@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.projectContext = DiskProjectContext()
         PromptBuilder.skills = Self.bundledSkills()
         model.slack = SlackHTTPClient(token: { secrets.secret(.slack) })
+        model.calendarReader = EventKitCalendarReader()
 
         // The prompt appears with the confetti and clears itself unless the user
         // starts interacting with it.
