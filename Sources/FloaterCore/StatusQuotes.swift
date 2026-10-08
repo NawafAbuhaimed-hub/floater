@@ -78,7 +78,7 @@ public enum StatusQuotes {
         ],
         .focusing: [
             "I am Iron Man.",
-            "Genius, billionaire, playboy, philanthropist.",
+            "JARVIS, you up?",
             "I am Groot.",
             "Ain't no thing like me, except me.",
         ],
@@ -102,7 +102,7 @@ public enum StatusQuotes {
             "Your friendly neighbourhood Spider-Man.",
             "Oh yeah. We're doing this.",
             "I am Groot.",
-            "Genius, billionaire, playboy, philanthropist.",
+            "Heroes are made by the paths they choose.",
         ],
         .windingDown: [
             "Part of the journey is the end.",

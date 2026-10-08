@@ -143,3 +143,18 @@ final class StatusQuoteTests: XCTestCase {
         XCTAssertEqual(mood(slot: 9), .fresh)
     }
 }
+
+extension StatusQuoteTests {
+    /// The status goes to a work Slack, so the pool stays work-appropriate.
+    func testNoLineCarriesWordsUnwantedInAWorkStatus() {
+        let unwanted = ["playboy", "damn", "hell", "kill", "drunk", "stupid"]
+        for mood in StatusMood.allCases {
+            for line in StatusQuotes.lines[mood] ?? [] {
+                for word in unwanted {
+                    XCTAssertFalse(line.lowercased().contains(word),
+                                   "\(mood): \(line) contains \"\(word)\"")
+                }
+            }
+        }
+    }
+}
