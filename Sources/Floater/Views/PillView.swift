@@ -48,6 +48,14 @@ struct PillView: View {
             }
             .zIndex(1)
             controls
+            // The way back into the task list. It is deliberately outside
+            // `controls`, because the bubble borrows that space and switches
+            // its hit testing off — and a pill you cannot open is a trap.
+            PillButton(symbol: "chevron.up") {
+                model.mode = .expanded
+            }
+            .help("Open task list")
+            .zIndex(2)
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -92,10 +100,6 @@ struct PillView: View {
                 }
                 .help(model.phase == .running ? "Pause" : "Resume")
             }
-            PillButton(symbol: "chevron.up") {
-                model.mode = .expanded
-            }
-            .help("Open task list")
         }
         .background(
             GeometryReader { geo in
