@@ -40,7 +40,7 @@ public struct FocusRun: Equatable, Codable {
     }
 }
 
-public enum TimerPhase: String, Equatable, Codable {
+public enum TimerPhase: String, Equatable, Codable, Sendable {
     case idle
     case running
     case paused

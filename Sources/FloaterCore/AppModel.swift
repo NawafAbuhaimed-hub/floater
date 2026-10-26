@@ -34,6 +34,8 @@ public final class AppModel: ObservableObject {
     @Published public private(set) var phase: TimerPhase = .idle
     @Published public private(set) var remaining: TimeInterval = 0
     @Published public private(set) var progress: Double = 0
+    /// Groot's current face. Only reassigned when it really changes.
+    @Published public private(set) var mood: MascotMood = .chilling
     @Published public private(set) var activeTaskID: UUID?
     @Published public private(set) var activeTitle: String = ""
     @Published public private(set) var activePlannedMinutes: Int = 0
@@ -132,6 +134,10 @@ public final class AppModel: ObservableObject {
     private let calendar: Calendar
     private var ticker: Timer?
     private var runStartedAt: Date?
+    /// When a task was last finished, so the mascot can celebrate it.
+    public private(set) var lastCompletionAt: Date?
+    /// When the user last did something meaningful, so the mascot can get bored.
+    private var lastActivityAt: Date
     private var cancellables = Set<AnyCancellable>()
     private let noteEdits = PassthroughSubject<(id: UUID, text: String), Never>()
 
@@ -148,6 +154,7 @@ public final class AppModel: ObservableObject {
         self.store = store
         self.prefs = prefs
         self.clock = clock
+        self.lastActivityAt = clock.now
         self.calendar = calendar
         self.scheduler = scheduler
         self.secrets = secrets
@@ -256,6 +263,7 @@ public final class AppModel: ObservableObject {
         guard !lines.isEmpty else { return }
         for line in lines { store.add(title: line) }
         draft = ""
+        noteActivity()
         refresh()
     }
 
@@ -291,6 +299,8 @@ public final class AppModel: ObservableObject {
         followUpError = nil
         followUpPromptPinned = false
         completionLogError = nil
+        lastCompletionAt = clock.now
+        noteActivity()
         refresh()
         onCelebrate?(title)
         logCompletion(taskID: task.id, title: title, focusedSeconds: spent, finishedAt: clock.now)
@@ -300,6 +310,7 @@ public final class AppModel: ObservableObject {
     public func reopen(_ task: TaskItem) {
         unlogCompletion(task)
         store.reopen(task)
+        noteActivity()
         refresh()
     }
 
@@ -309,11 +320,13 @@ public final class AppModel: ObservableObject {
         if task.id == expandedTaskID { expandedTaskID = nil }
         unlogCompletion(task)
         store.delete(task)
+        noteActivity()
         refresh()
     }
 
     public func clearCompleted() {
         store.clearCompleted(at: clock.now)
+        noteActivity()
         refresh()
     }
 
@@ -367,6 +380,7 @@ public final class AppModel: ObservableObject {
         // Leaving Done makes any logged completion a lie; take it back.
         if task.isDone { unlogCompletion(task) }
         store.setStatus(status, for: task, at: clock.now)
+        noteActivity()
         refresh()
     }
 
@@ -386,6 +400,7 @@ public final class AppModel: ObservableObject {
     public func toggleDone(_ task: TaskItem) {
         if task.isDone {
             store.reopen(task)
+            noteActivity()
             refresh()
         } else {
             complete(task)
@@ -395,11 +410,13 @@ public final class AppModel: ObservableObject {
     /// Opening a task's note also selects it, so Cmd-C has an obvious target.
     public func setCategory(_ category: TaskCategory?, for task: TaskItem) {
         store.setCategory(category?.id, forTaskWith: task.id)
+        noteActivity()
         refresh()
     }
 
     public func setDueDate(_ due: Date?, for task: TaskItem) {
         store.setDueDate(due, forTaskWith: task.id)
+        noteActivity()
         refresh()
     }
 
@@ -407,12 +424,14 @@ public final class AppModel: ObservableObject {
     public func addCategory(name: String, emoji: String = "", colorHex: String = "8E8E93",
                             repoPath: String = "") -> TaskCategory? {
         let created = store.addCategory(name: name, emoji: emoji, colorHex: colorHex, repoPath: repoPath)
+        noteActivity()
         refresh()
         return created
     }
 
     public func deleteCategory(_ category: TaskCategory) {
         store.deleteCategory(category)
+        noteActivity()
         refresh()
     }
 
@@ -422,6 +441,9 @@ public final class AppModel: ObservableObject {
     }
 
     public func noteChanged(_ text: String, for task: TaskItem) {
+        // Typing is activity. This fires per keystroke, which is fine: it only
+        // assigns one unpublished Date (no publish, no store write).
+        noteActivity()
         noteEdits.send((id: task.id, text: text))
     }
 
@@ -986,6 +1008,7 @@ public final class AppModel: ObservableObject {
         runStartedAt = clock.now
         engine.start(taskID: task.id, title: task.title, minutes: minutes)
         mode = .collapsed
+        noteActivity()
         refresh()
         Task { await syncSlackStatus(force: true) }
     }
@@ -996,6 +1019,7 @@ public final class AppModel: ObservableObject {
         case .paused: engine.resume()
         default: return
         }
+        noteActivity()
         refresh()
     }
 
@@ -1003,6 +1027,7 @@ public final class AppModel: ObservableObject {
         guard engine.isActive else { return }
         engine.extend(minutes: minutes)
         onDismissTimeUp?()
+        noteActivity()
         refresh()
         onExtend?(minutes)
     }
@@ -1011,6 +1036,7 @@ public final class AppModel: ObservableObject {
     public func stopTimer() {
         _ = finishActiveRun(completedTask: false)
         onDismissTimeUp?()
+        noteActivity()
         refresh()
         Task { await syncSlackStatus(force: true) }
     }
@@ -1030,7 +1056,14 @@ public final class AppModel: ObservableObject {
 
     // MARK: - Internals
 
+    private func noteActivity() {
+        lastActivityAt = clock.now
+    }
+
     private func handleElapsed(_ run: FocusRun) {
+        // The user was working the whole run. Without this, a 20+ minute run
+        // that times out looks like 20+ idle minutes and the mascot says bored.
+        noteActivity()
         attentionPulse += 1
         onTimeUp?(run)
     }
@@ -1081,7 +1114,11 @@ public final class AppModel: ObservableObject {
         $scratchpad
             .dropFirst()
             .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
-            .sink { [weak self] text in self?.store.scratchpadText = text }
+            .sink { [weak self] text in
+                // Once per typing pause (not per keystroke), alongside the write.
+                self?.noteActivity()
+                self?.store.scratchpadText = text
+            }
             .store(in: &cancellables)
     }
 
@@ -1098,16 +1135,31 @@ public final class AppModel: ObservableObject {
     private static let ticksPerSlackCheck = 120
     private var ticksSinceSlackCheck = 0
 
+    /// Ticks per idle face check. Idle moods (victory fading after 90s, bored
+    /// after 20 min, sleepy by the hour) change on a scale of seconds to
+    /// minutes, so 8 ticks (2s) keeps the face within ~2s of correct. Every
+    /// tick (4x/s) would be wasted work; the old 120 left it up to 30s late.
+    private static let ticksPerIdleMoodCheck = 8
+    private var ticksSinceMoodCheck = 0
+
     /// The hot path. A countdown changing is not a reason to re-read the
     /// database, recompute every statistic and write to disk — which is what
     /// calling the full refresh here was doing, four times a second, forever.
-    private func onTick() {
+    func onTick() {  // internal (not private) so tests can drive the real path
         let justElapsed = engine.tick()
         if justElapsed || phase != engine.phase {
             refresh()
         } else if engine.isActive {
             // Nothing is counting down when idle, so there is nothing to update.
             refreshTimerDisplay()
+        }
+
+        // Idle moods depend on the clock and nothing else refreshes them while
+        // the desk is quiet. Cheap: no store access, publishes only on change.
+        ticksSinceMoodCheck += 1
+        if ticksSinceMoodCheck >= Self.ticksPerIdleMoodCheck {
+            ticksSinceMoodCheck = 0
+            refreshMood()
         }
 
         ticksSinceSlackCheck += 1
@@ -1122,8 +1174,9 @@ public final class AppModel: ObservableObject {
     /// differs, because every assignment to a @Published re-renders the panel
     /// whether or not the value changed.
     public func refreshTimerDisplay() {
+        var changed = false
         let newPhase = engine.phase
-        if phase != newPhase { phase = newPhase }
+        if phase != newPhase { phase = newPhase; changed = true }
 
         // The countdown is shown in whole seconds. Publishing four times a
         // second to redraw the same digits is four times the work for no
@@ -1131,10 +1184,38 @@ public final class AppModel: ObservableObject {
         let newRemaining = engine.remaining
         if Int(newRemaining.rounded(.up)) != Int(remaining.rounded(.up)) {
             remaining = newRemaining
+            changed = true
         }
 
         let newProgress = engine.progress
-        if abs(newProgress - progress) > 0.002 { progress = newProgress }
+        if abs(newProgress - progress) > 0.002 { progress = newProgress; changed = true }
+
+        // Only recompute the face when an input actually moved.
+        if changed { refreshMood() }
+    }
+
+    /// Builds the mascot's inputs from current state. Assigns `mood` only when
+    /// it differs, so an unchanged face never re-renders the panel.
+    private func refreshMood() {
+        let now = clock.now
+        let input = MascotInput(
+            phase: phase,
+            progress: progress,
+            remaining: remaining,
+            // A clock set backwards gives a negative gap; that is not a fresh win.
+            secondsSinceCompletion: lastCompletionAt
+                .map { now.timeIntervalSince($0) }
+                .flatMap { $0 >= 0 ? $0 : nil },
+            secondsSinceActivity: now.timeIntervalSince(lastActivityAt),
+            streakDays: stats?.streakDays ?? 0,
+            goalMet: stats?.goalMet ?? false,
+            overdue: overdueCount,
+            blocked: tasks.filter { $0.status == .blocked }.count,
+            openTasks: tasks.filter { !$0.isDone }.count,
+            hour: calendar.component(.hour, from: now)
+        )
+        let next = MascotMood.current(input)
+        if next != mood { mood = next }
     }
 
     /// Pulls the latest state out of the store and engine into published values.
@@ -1157,5 +1238,6 @@ public final class AppModel: ObservableObject {
         if let previous = lastLevel, fresh.level > previous { levelUps += 1 }
         lastLevel = fresh.level
         stats = fresh
+        refreshMood()
     }
 }

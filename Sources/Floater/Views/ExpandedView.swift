@@ -7,6 +7,7 @@ import SwiftUI
 struct ExpandedView: View {
     @EnvironmentObject private var model: AppModel
     @FocusState private var draftFocused: Bool
+    @State private var mascotSpeaking = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -44,16 +45,23 @@ struct ExpandedView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Image(systemName: "timer")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Theme.accent)
-            TabSwitcher(selection: $model.tab)
-            Spacer(minLength: 4)
+            MascotView(mood: model.mood, size: 30)
+                .mascotSpeech($mascotSpeaking)
+            // The tabs and the gap after them. While Groot talks, his bubble
+            // takes over this space rather than covering the task list.
+            MascotBubbleHost(line: model.mood.line, speaking: mascotSpeaking, reach: 6) {
+                HStack(spacing: 8) {
+                    TabSwitcher(selection: $model.tab)
+                    Spacer(minLength: 4)
+                }
+            }
             PillButton(symbol: "chevron.down") { model.mode = .collapsed }
                 .help("Collapse")
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        // 30pt Groot (1.5pt per pixel, 3 device pixels at 2x) + 14 = 44pt, the
+        // same height the 26pt buttons gave with 9pt.
+        .padding(.vertical, 7)
     }
 
     // MARK: - Tasks

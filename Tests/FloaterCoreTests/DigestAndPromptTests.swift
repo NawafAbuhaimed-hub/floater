@@ -316,8 +316,13 @@ final class PromptSkillTests: XCTestCase {
 
 @MainActor
 final class UITaskDetectionTests: XCTestCase {
+    /// A task is only usable while its store is alive, so the stores are kept
+    /// for the length of the test rather than dying when the helper returns.
+    private var stores: [Store] = []
+
     private func task(_ title: String, note: String = "") throws -> TaskItem {
         let store = try Store(inMemory: true)
+        stores.append(store)
         let item = store.add(title: title)!
         if !note.isEmpty { store.updateNote(note, forTaskWith: item.id) }
         return store.tasks[0]

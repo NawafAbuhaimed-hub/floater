@@ -7,6 +7,12 @@ import SwiftUI
 struct PillView: View {
     @EnvironmentObject private var model: AppModel
     @State private var pulse = false
+    @State private var speaking = false
+    @State private var bubbleTight = false
+    @State private var controlsWidth: CGFloat = 0
+
+    /// True while the bubble is stretched over the controls.
+    private var borrowed: Bool { speaking && bubbleTight }
 
     private var ringColor: Color {
         Theme.urgency(remaining: model.remaining, active: model.isActive)
@@ -15,17 +21,54 @@ struct PillView: View {
     var body: some View {
         HStack(spacing: 10) {
             leading
-            VStack(alignment: .leading, spacing: 1) {
-                Text(model.isActive ? model.activeTitle : "Nothing running")
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .foregroundStyle(model.isActive ? .primary : .secondary)
-                Text(subtitle)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+            // The title block and the flexible gap after it. While Groot talks,
+            // his bubble takes over exactly this space.
+            // At a narrow pill the title block is too small for a readable line,
+            // so the bubble stretches over the controls (`bleed`) and they fade.
+            MascotBubbleHost(
+                line: model.mood.line,
+                speaking: speaking,
+                bleed: controlsWidth + 10,
+                onTight: { bubbleTight = $0 }
+            ) {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(model.isActive ? model.activeTitle : "Nothing running")
+                            .font(.system(size: 13, weight: .medium))
+                            .lineLimit(1)
+                            .foregroundStyle(model.isActive ? .primary : .secondary)
+                        Text(subtitle)
+                            .font(.system(size: 10.5))
+                            .monospacedDigit()
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                }
             }
-            Spacer(minLength: 4)
+            .zIndex(1)
+            controls
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            ZStack {
+                GlassBackground(cornerRadius: Theme.pillCorner)
+                Capsule()
+                    .strokeBorder(ringColor.opacity(pulse ? 0.9 : 0), lineWidth: 3)
+                    .animation(.easeInOut(duration: 0.35), value: pulse)
+            }
+        )
+        .scaleEffect(pulse ? 1.04 : 1)
+        .animation(.spring(response: 0.3, dampingFraction: 0.5), value: pulse)
+        .padding(6)
+        .onChange(of: model.attentionPulse) { _, _ in throb() }
+    }
+
+    /// Streak and buttons. Same 10pt spacing as the row, so grouping them
+    /// changes nothing about the layout.
+    private var controls: some View {
+        HStack(spacing: 10) {
             if !model.isActive, let stats = model.stats, stats.streakDays > 0 {
                 HStack(spacing: 2) {
                     Image(systemName: "flame.fill")
@@ -54,44 +97,32 @@ struct PillView: View {
             }
             .help("Open task list")
         }
-        .padding(.horizontal, 12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            ZStack {
-                GlassBackground(cornerRadius: Theme.pillCorner)
-                Capsule()
-                    .strokeBorder(ringColor.opacity(pulse ? 0.9 : 0), lineWidth: 3)
-                    .animation(.easeInOut(duration: 0.35), value: pulse)
+            GeometryReader { geo in
+                Color.clear.onChange(of: geo.size.width, initial: true) { _, new in controlsWidth = new }
             }
         )
-        .scaleEffect(pulse ? 1.04 : 1)
-        .animation(.spring(response: 0.3, dampingFraction: 0.5), value: pulse)
-        .padding(6)
-        .onChange(of: model.attentionPulse) { _, _ in throb() }
+        .opacity(borrowed ? 0 : 1)
+        .allowsHitTesting(!borrowed)
+        .animation(.easeInOut(duration: 0.18), value: borrowed)
     }
 
     private var leading: some View {
         ZStack {
             ProgressRing(progress: model.progress, color: ringColor)
-            if model.isActive {
-                Text(model.remainingText)
-                    .font(.system(size: 10, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(model.phase == .paused ? .secondary : .primary)
-            } else {
-                Image(systemName: "timer")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
+            MascotView(mood: model.mood, size: 20)
+                .mascotSpeech($speaking)
         }
         .frame(width: 34, height: 34)
     }
 
     private var subtitle: String {
         switch model.phase {
-        case .running: return "focusing"
-        case .paused: return "paused"
-        case .elapsed: return "time's up"
+        // The countdown used to sit inside the ring; the ring now frames Groot,
+        // so the time lives here instead.
+        case .running: return "\(model.remainingText) · focusing"
+        case .paused: return "\(model.remainingText) · paused"
+        case .elapsed: return "\(model.remainingText) · time's up"
         case .idle:
             if model.overdueCount > 0 {
                 return "\(model.overdueCount) overdue"
